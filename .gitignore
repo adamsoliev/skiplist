@@ -1,0 +1,12 @@
+# Build artifacts
+mini-lsm
+run_tests
+*.o
+*.dSYM/
+
+# Third party dependencies
+third_party/
+
+# IDE
+.vscode/
+.idea/
