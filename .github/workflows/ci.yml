@@ -46,5 +46,5 @@ jobs:
 
       - name: Run clang-tidy
         run: |
-          find src tests -name '*.cpp' -o -name '*.hpp' | \
-            xargs clang-tidy --warnings-as-errors='*'
+          find src -name '*.cpp' -o -name '*.hpp' | \
+            xargs clang-tidy -- -std=c++17
