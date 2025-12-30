@@ -17,20 +17,24 @@ int main()
 
         // Point lookups
         std::string value;
-        if (skiplist.get("apple", &value)) {
+        if (skiplist.get("apple", &value))
+        {
                 std::cout << "apple = " << value << std::endl; // should be "green"
         }
-        if (skiplist.get("banana", &value)) {
+        if (skiplist.get("banana", &value))
+        {
                 std::cout << "banana = " << value << std::endl;
         }
-        if (!skiplist.get("grape", &value)) {
+        if (!skiplist.get("grape", &value))
+        {
                 std::cout << "grape not found" << std::endl;
         }
 
         // Iterator scan
         std::cout << "\nAll entries (sorted):" << std::endl;
         minilsm::SkipList::Iterator iter(&skiplist);
-        for (iter.seek_to_first(); iter.valid(); iter.next()) {
+        for (iter.seek_to_first(); iter.valid(); iter.next())
+        {
                 std::cout << "  " << iter.key().user_key.to_string() << " (seq=" << iter.key().sequence
                           << ") = " << iter.value().to_string() << std::endl;
         }
@@ -38,7 +42,8 @@ int main()
         // Seek to specific key
         std::cout << "\nSeek to 'banana':" << std::endl;
         iter.seek("banana");
-        while (iter.valid()) {
+        while (iter.valid())
+        {
                 std::cout << "  " << iter.key().user_key.to_string() << " = " << iter.value().to_string() << std::endl;
                 iter.next();
         }

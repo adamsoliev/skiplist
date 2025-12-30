@@ -7,7 +7,7 @@ using namespace minilsm;
 
 class SkipListIteratorTest : public ::testing::Test
 {
-protected:
+      protected:
         void SetUp() override
         {
                 arena_ = std::make_unique<Arena>();
@@ -45,7 +45,8 @@ TEST_F(SkipListIteratorTest, SeekToFirstForwardIteration)
         std::vector<std::string> actual;
 
         SkipList::Iterator iter(list_.get());
-        for (iter.seek_to_first(); iter.valid(); iter.next()) {
+        for (iter.seek_to_first(); iter.valid(); iter.next())
+        {
                 actual.push_back(iter.key().user_key.to_string());
         }
 
@@ -60,7 +61,8 @@ TEST_F(SkipListIteratorTest, ForwardIterationValues)
         std::vector<std::string> actual_values;
 
         SkipList::Iterator iter(list_.get());
-        for (iter.seek_to_first(); iter.valid(); iter.next()) {
+        for (iter.seek_to_first(); iter.valid(); iter.next())
+        {
                 actual_values.push_back(iter.value().to_string());
         }
 
@@ -77,7 +79,8 @@ TEST_F(SkipListIteratorTest, ForwardIterationWithVersions)
         std::vector<std::pair<uint64_t, std::string>> actual;
 
         SkipList::Iterator iter(list_.get());
-        for (iter.seek_to_first(); iter.valid(); iter.next()) {
+        for (iter.seek_to_first(); iter.valid(); iter.next())
+        {
                 actual.emplace_back(iter.key().sequence, iter.value().to_string());
         }
 
@@ -96,7 +99,8 @@ TEST_F(SkipListIteratorTest, SeekToLastBackwardIteration)
         std::vector<std::string> actual;
 
         SkipList::Iterator iter(list_.get());
-        for (iter.seek_to_last(); iter.valid(); iter.prev()) {
+        for (iter.seek_to_last(); iter.valid(); iter.prev())
+        {
                 actual.push_back(iter.key().user_key.to_string());
         }
 
@@ -111,7 +115,8 @@ TEST_F(SkipListIteratorTest, BackwardIterationValues)
         std::vector<std::string> actual_values;
 
         SkipList::Iterator iter(list_.get());
-        for (iter.seek_to_last(); iter.valid(); iter.prev()) {
+        for (iter.seek_to_last(); iter.valid(); iter.prev())
+        {
                 actual_values.push_back(iter.value().to_string());
         }
 
@@ -128,7 +133,8 @@ TEST_F(SkipListIteratorTest, BackwardIterationWithVersions)
         std::vector<std::pair<uint64_t, std::string>> actual;
 
         SkipList::Iterator iter(list_.get());
-        for (iter.seek_to_last(); iter.valid(); iter.prev()) {
+        for (iter.seek_to_last(); iter.valid(); iter.prev())
+        {
                 actual.emplace_back(iter.key().sequence, iter.value().to_string());
         }
 
@@ -308,7 +314,8 @@ TEST_F(SkipListIteratorTest, SingleElementBackward)
 TEST_F(SkipListIteratorTest, LargeListForwardIteration)
 {
         const int N = 1000;
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < N; i++)
+        {
                 // Insert keys that sort numerically correctly
                 char key[16];
                 snprintf(key, sizeof(key), "key%06d", i);
@@ -319,7 +326,8 @@ TEST_F(SkipListIteratorTest, LargeListForwardIteration)
         int count = 0;
         int prev_num = -1;
 
-        for (iter.seek_to_first(); iter.valid(); iter.next()) {
+        for (iter.seek_to_first(); iter.valid(); iter.next())
+        {
                 std::string key = iter.key().user_key.to_string();
                 int num = std::stoi(key.substr(3));
                 EXPECT_GT(num, prev_num) << "Keys should be in ascending order";
@@ -333,7 +341,8 @@ TEST_F(SkipListIteratorTest, LargeListForwardIteration)
 TEST_F(SkipListIteratorTest, LargeListBackwardIteration)
 {
         const int N = 1000;
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < N; i++)
+        {
                 char key[16];
                 snprintf(key, sizeof(key), "key%06d", i);
                 insert(key, i + 1, std::to_string(i));
@@ -343,7 +352,8 @@ TEST_F(SkipListIteratorTest, LargeListBackwardIteration)
         int count = 0;
         int prev_num = N;
 
-        for (iter.seek_to_last(); iter.valid(); iter.prev()) {
+        for (iter.seek_to_last(); iter.valid(); iter.prev())
+        {
                 std::string key = iter.key().user_key.to_string();
                 int num = std::stoi(key.substr(3));
                 EXPECT_LT(num, prev_num) << "Keys should be in descending order during backward iteration";

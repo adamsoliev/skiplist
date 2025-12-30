@@ -22,13 +22,9 @@ struct InternalKey
         uint64_t sequence;
         KeyType type;
 
-        InternalKey() : user_key(), sequence(0), type(KeyType::Put)
-        {
-        }
+        InternalKey() : user_key(), sequence(0), type(KeyType::Put) {}
 
-        InternalKey(Slice uk, uint64_t seq, KeyType t) : user_key(uk), sequence(seq), type(t)
-        {
-        }
+        InternalKey(Slice uk, uint64_t seq, KeyType t) : user_key(uk), sequence(seq), type(t) {}
 
         // Compare: user_key ASC, sequence DESC
         // Same user key -> newest (highest sequence) comes first
@@ -45,20 +41,11 @@ struct InternalKey
                 return 0;
         }
 
-        bool operator<(const InternalKey &other) const
-        {
-                return compare(other) < 0;
-        }
+        bool operator<(const InternalKey &other) const { return compare(other) < 0; }
 
-        bool operator==(const InternalKey &other) const
-        {
-                return compare(other) == 0;
-        }
+        bool operator==(const InternalKey &other) const { return compare(other) == 0; }
 
-        bool operator!=(const InternalKey &other) const
-        {
-                return compare(other) != 0;
-        }
+        bool operator!=(const InternalKey &other) const { return compare(other) != 0; }
 };
 
 constexpr uint64_t kMaxSequenceNumber = UINT64_MAX;

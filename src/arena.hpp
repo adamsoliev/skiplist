@@ -13,12 +13,10 @@ namespace minilsm
 
 class Arena
 {
-public:
+      public:
         static constexpr size_t kBlockSize = 4096;
 
-        Arena() : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0)
-        {
-        }
+        Arena() : alloc_ptr_(nullptr), alloc_bytes_remaining_(0), memory_usage_(0) {}
 
         ~Arena() = default;
 
@@ -28,7 +26,8 @@ public:
         // Thread-safe allocation
         char *allocate(size_t bytes)
         {
-                if (bytes == 0) {
+                if (bytes == 0)
+                {
                         return nullptr;
                 }
 
@@ -41,7 +40,8 @@ public:
         {
                 assert((align & (align - 1)) == 0); // power of 2
 
-                if (bytes == 0) {
+                if (bytes == 0)
+                {
                         return nullptr;
                 }
 
@@ -50,7 +50,8 @@ public:
                 size_t current_mod = reinterpret_cast<uintptr_t>(alloc_ptr_) & (align - 1);
                 size_t slop = (current_mod == 0) ? 0 : (align - current_mod);
 
-                if (slop + bytes <= alloc_bytes_remaining_) {
+                if (slop + bytes <= alloc_bytes_remaining_)
+                {
                         alloc_ptr_ += slop;
                         alloc_bytes_remaining_ -= slop;
                         return allocate_internal(bytes);
@@ -60,16 +61,14 @@ public:
                 return allocate_new_block_internal(bytes);
         }
 
-        size_t memory_usage() const
-        {
-                return memory_usage_.load(std::memory_order_relaxed);
-        }
+        size_t memory_usage() const { return memory_usage_.load(std::memory_order_relaxed); }
 
-private:
+      private:
         // Must be called with mutex held
         char *allocate_internal(size_t bytes)
         {
-                if (bytes <= alloc_bytes_remaining_) {
+                if (bytes <= alloc_bytes_remaining_)
+                {
                         char *result = alloc_ptr_;
                         alloc_ptr_ += bytes;
                         alloc_bytes_remaining_ -= bytes;
@@ -82,7 +81,8 @@ private:
         char *allocate_slow_internal(size_t bytes)
         {
                 // Large allocation: give it its own block
-                if (bytes > kBlockSize / 4) {
+                if (bytes > kBlockSize / 4)
+                {
                         return allocate_new_block_internal(bytes);
                 }
 

@@ -6,7 +6,7 @@ using namespace minilsm;
 
 class SkipListBasicTest : public ::testing::Test
 {
-protected:
+      protected:
         void SetUp() override
         {
                 arena_ = std::make_unique<Arena>();
@@ -32,10 +32,7 @@ TEST_F(SkipListBasicTest, EmptyListGetReturnsNotFound)
         EXPECT_FALSE(list_->get("any_key", &value));
 }
 
-TEST_F(SkipListBasicTest, EmptyListGetWithNullValue)
-{
-        EXPECT_FALSE(list_->get("any_key", nullptr));
-}
+TEST_F(SkipListBasicTest, EmptyListGetWithNullValue) { EXPECT_FALSE(list_->get("any_key", nullptr)); }
 
 TEST_F(SkipListBasicTest, EmptyListIteratorNotValid)
 {
@@ -261,8 +258,9 @@ TEST_F(SkipListBasicTest, BinaryDataInKeyAndValue)
         std::string binary_value = "val\x00ue";
         binary_value.resize(6);
 
-        list_->insert(InternalKey(Slice(binary_key.data(), binary_key.size()), 1, KeyType::Put),
-                      Slice(binary_value.data(), binary_value.size()));
+        list_->insert(
+            InternalKey(Slice(binary_key.data(), binary_key.size()), 1, KeyType::Put),
+            Slice(binary_value.data(), binary_value.size()));
 
         std::string value;
         EXPECT_TRUE(list_->get(Slice(binary_key.data(), binary_key.size()), &value));
@@ -272,14 +270,16 @@ TEST_F(SkipListBasicTest, BinaryDataInKeyAndValue)
 TEST_F(SkipListBasicTest, ManyInserts)
 {
         const int N = 1000;
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < N; i++)
+        {
                 std::string key = "key" + std::to_string(i);
                 std::string value = "value" + std::to_string(i);
                 insert(key, i + 1, value);
         }
 
         // Verify all keys
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < N; i++)
+        {
                 std::string key = "key" + std::to_string(i);
                 std::string expected_value = "value" + std::to_string(i);
                 std::string value;
@@ -300,7 +300,8 @@ TEST_F(SkipListBasicTest, ArenaMemoryGrowsWithInserts)
         size_t after_one = arena_->memory_usage();
         EXPECT_GE(after_one, initial_usage);
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 100; i++)
+        {
                 insert("key" + std::to_string(i), i + 2, "value" + std::to_string(i));
         }
         size_t after_many = arena_->memory_usage();

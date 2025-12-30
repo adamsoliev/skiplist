@@ -20,7 +20,7 @@ TEST_TARGET = run_tests
 # Number of parallel test jobs (default to number of CPU cores)
 NPROCS := $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
-.PHONY: all clean check test gtest
+.PHONY: all clean check test gtest format format-check lint
 
 all: $(TARGET)
 
@@ -68,12 +68,27 @@ clean:
 distclean: clean
 	rm -rf $(GTEST_DIR) $(GTEST_BUILD_DIR)
 
+# Format source files
+format:
+	@find src tests -name '*.cpp' -o -name '*.hpp' -o -name '*.h' | xargs clang-format -i
+
+# Check formatting without modifying files
+format-check:
+	@find src tests -name '*.cpp' -o -name '*.hpp' -o -name '*.h' | xargs clang-format --dry-run --Werror
+
+# Run clang-tidy linter
+lint:
+	@find src tests -name '*.cpp' -o -name '*.hpp' | xargs clang-tidy
+
 # Show help
 help:
 	@echo "Available targets:"
-	@echo "  all       - Build main executable (default)"
-	@echo "  check     - Build and run all tests"
-	@echo "  test      - Alias for check"
-	@echo "  gtest     - Download and build Google Test only"
-	@echo "  clean     - Remove build artifacts"
-	@echo "  distclean - Remove build artifacts and Google Test"
+	@echo "  all          - Build main executable (default)"
+	@echo "  check        - Build and run all tests"
+	@echo "  test         - Alias for check"
+	@echo "  gtest        - Download and build Google Test only"
+	@echo "  format       - Format source files with clang-format"
+	@echo "  format-check - Check formatting without modifying files"
+	@echo "  lint         - Run clang-tidy linter"
+	@echo "  clean        - Remove build artifacts"
+	@echo "  distclean    - Remove build artifacts and Google Test"

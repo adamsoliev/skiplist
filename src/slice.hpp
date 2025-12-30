@@ -13,41 +13,21 @@ struct Slice
         const char *data_;
         size_t size_;
 
-        Slice() : data_(nullptr), size_(0)
-        {
-        }
+        Slice() : data_(nullptr), size_(0) {}
 
-        Slice(const char *data, size_t size) : data_(data), size_(size)
-        {
-        }
+        Slice(const char *data, size_t size) : data_(data), size_(size) {}
 
-        Slice(const char *s) : data_(s), size_(std::strlen(s))
-        {
-        }
+        Slice(const char *s) : data_(s), size_(std::strlen(s)) {}
 
-        Slice(const std::string &s) : data_(s.data()), size_(s.size())
-        {
-        }
+        Slice(const std::string &s) : data_(s.data()), size_(s.size()) {}
 
-        const char *data() const
-        {
-                return data_;
-        }
+        const char *data() const { return data_; }
 
-        size_t size() const
-        {
-                return size_;
-        }
+        size_t size() const { return size_; }
 
-        bool empty() const
-        {
-                return size_ == 0;
-        }
+        bool empty() const { return size_ == 0; }
 
-        char operator[](size_t i) const
-        {
-                return data_[i];
-        }
+        char operator[](size_t i) const { return data_[i]; }
 
         int compare(const Slice &other) const
         {
@@ -67,25 +47,13 @@ struct Slice
                 return size_ == other.size_ && std::memcmp(data_, other.data_, size_) == 0;
         }
 
-        bool operator!=(const Slice &other) const
-        {
-                return !(*this == other);
-        }
+        bool operator!=(const Slice &other) const { return !(*this == other); }
 
-        bool operator<(const Slice &other) const
-        {
-                return compare(other) < 0;
-        }
+        bool operator<(const Slice &other) const { return compare(other) < 0; }
 
-        std::string to_string() const
-        {
-                return std::string(data_, size_);
-        }
+        std::string to_string() const { return std::string(data_, size_); }
 
-        std::string_view to_string_view() const
-        {
-                return std::string_view(data_, size_);
-        }
+        std::string_view to_string_view() const { return std::string_view(data_, size_); }
 };
 
 } // namespace minilsm
