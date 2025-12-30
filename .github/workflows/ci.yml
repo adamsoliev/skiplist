@@ -47,4 +47,4 @@ jobs:
       - name: Run clang-tidy
         run: |
           find src \( -name '*.cpp' -o -name '*.hpp' \) | \
-            xargs clang-tidy -- -std=c++17
+            xargs -I {} clang-tidy {} -- -std=c++17

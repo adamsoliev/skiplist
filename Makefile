@@ -78,7 +78,7 @@ format-check:
 
 # Run clang-tidy linter
 lint:
-	@find src \( -name '*.cpp' -o -name '*.hpp' \) | xargs clang-tidy -- -std=c++17
+	@find src \( -name '*.cpp' -o -name '*.hpp' \) | xargs -I {} clang-tidy {} -- -std=c++17
 
 # Show help
 help:
