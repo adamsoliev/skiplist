@@ -70,15 +70,15 @@ distclean: clean
 
 # Format source files
 format:
-	@find src tests -name '*.cpp' -o -name '*.hpp' -o -name '*.h' | xargs clang-format -i
+	@find src tests \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) | xargs clang-format -i
 
 # Check formatting without modifying files
 format-check:
-	@find src tests -name '*.cpp' -o -name '*.hpp' -o -name '*.h' | xargs clang-format --dry-run --Werror
+	@find src tests \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) | xargs clang-format --dry-run --Werror
 
 # Run clang-tidy linter
 lint:
-	@find src tests -name '*.cpp' -o -name '*.hpp' | xargs clang-tidy
+	@find src \( -name '*.cpp' -o -name '*.hpp' \) | xargs clang-tidy -- -std=c++17
 
 # Show help
 help:
