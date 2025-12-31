@@ -32,6 +32,17 @@ jobs:
           path: benchmark_results.json
           retention-days: 30
 
+      - name: Create gh-pages branch if missing
+        if: github.event_name == 'push'
+        run: |
+          if ! git ls-remote --exit-code --heads origin gh-pages; then
+            git checkout --orphan gh-pages
+            git reset --hard
+            git commit --allow-empty -m "init gh-pages"
+            git push origin gh-pages
+            git checkout -
+          fi
+
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
