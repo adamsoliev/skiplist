@@ -22,9 +22,7 @@ class SkipListBasicTest : public ::testing::Test
         std::unique_ptr<SkipList> list_;
 };
 
-// ============================================================================
 // Empty List Behavior
-// ============================================================================
 
 TEST_F(SkipListBasicTest, EmptyListGetReturnsNotFound)
 {
@@ -55,9 +53,7 @@ TEST_F(SkipListBasicTest, EmptyListSeekNotValid)
         EXPECT_FALSE(iter.valid());
 }
 
-// ============================================================================
 // Single Element Operations
-// ============================================================================
 
 TEST_F(SkipListBasicTest, InsertAndGetSingleElement)
 {
@@ -82,9 +78,7 @@ TEST_F(SkipListBasicTest, GetWithNullValuePointer)
         EXPECT_TRUE(list_->get("key1", nullptr));
 }
 
-// ============================================================================
 // Multiple Elements - Ordering
-// ============================================================================
 
 TEST_F(SkipListBasicTest, InsertMultipleKeysInOrder)
 {
@@ -134,9 +128,7 @@ TEST_F(SkipListBasicTest, InsertMultipleKeysRandomOrder)
         EXPECT_EQ(value, "blub");
 }
 
-// ============================================================================
 // Version Handling (Same user_key, different sequences)
-// ============================================================================
 
 TEST_F(SkipListBasicTest, NewerVersionOverridesOlder)
 {
@@ -192,9 +184,7 @@ TEST_F(SkipListBasicTest, MultipleVersionsAllStored)
         EXPECT_FALSE(iter.valid());
 }
 
-// ============================================================================
 // Delete (Tombstone) Handling
-// ============================================================================
 
 TEST_F(SkipListBasicTest, DeleteMakesKeyNotFound)
 {
@@ -226,9 +216,7 @@ TEST_F(SkipListBasicTest, OlderDeleteDoesNotAffectNewerPut)
         EXPECT_EQ(value, "value");
 }
 
-// ============================================================================
 // Edge Cases
-// ============================================================================
 
 TEST_F(SkipListBasicTest, EmptyKeyAndValue)
 {
@@ -288,9 +276,7 @@ TEST_F(SkipListBasicTest, ManyInserts)
         }
 }
 
-// ============================================================================
 // Arena Memory Usage
-// ============================================================================
 
 TEST_F(SkipListBasicTest, ArenaMemoryGrowsWithInserts)
 {

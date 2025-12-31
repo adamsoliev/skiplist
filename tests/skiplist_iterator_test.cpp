@@ -33,9 +33,7 @@ class SkipListIteratorTest : public ::testing::Test
         std::unique_ptr<SkipList> list_;
 };
 
-// ============================================================================
 // Forward Iteration
-// ============================================================================
 
 TEST_F(SkipListIteratorTest, SeekToFirstForwardIteration)
 {
@@ -87,9 +85,7 @@ TEST_F(SkipListIteratorTest, ForwardIterationWithVersions)
         EXPECT_EQ(actual, expected);
 }
 
-// ============================================================================
 // Backward Iteration
-// ============================================================================
 
 TEST_F(SkipListIteratorTest, SeekToLastBackwardIteration)
 {
@@ -141,9 +137,7 @@ TEST_F(SkipListIteratorTest, BackwardIterationWithVersions)
         EXPECT_EQ(actual, expected);
 }
 
-// ============================================================================
 // Seek Operations
-// ============================================================================
 
 TEST_F(SkipListIteratorTest, SeekToExistingKey)
 {
@@ -205,9 +199,7 @@ TEST_F(SkipListIteratorTest, SeekToKeyWithMultipleVersions)
         EXPECT_EQ(iter.value().to_string(), "v5");
 }
 
-// ============================================================================
 // Mixed Forward/Backward Navigation
-// ============================================================================
 
 TEST_F(SkipListIteratorTest, ForwardThenBackward)
 {
@@ -275,9 +267,7 @@ TEST_F(SkipListIteratorTest, NextAtLastInvalidates)
         EXPECT_FALSE(iter.valid());
 }
 
-// ============================================================================
 // Single Element List
-// ============================================================================
 
 TEST_F(SkipListIteratorTest, SingleElementForward)
 {
@@ -307,9 +297,7 @@ TEST_F(SkipListIteratorTest, SingleElementBackward)
         EXPECT_FALSE(iter.valid());
 }
 
-// ============================================================================
 // Large List Iteration
-// ============================================================================
 
 TEST_F(SkipListIteratorTest, LargeListForwardIteration)
 {
@@ -364,9 +352,7 @@ TEST_F(SkipListIteratorTest, LargeListBackwardIteration)
         EXPECT_EQ(count, N);
 }
 
-// ============================================================================
 // Iterator Independence
-// ============================================================================
 
 TEST_F(SkipListIteratorTest, MultipleIteratorsIndependent)
 {

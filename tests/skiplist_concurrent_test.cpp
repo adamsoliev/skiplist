@@ -24,9 +24,7 @@ class SkipListConcurrentTest : public ::testing::Test
         std::unique_ptr<SkipList> list_;
 };
 
-// ============================================================================
 // Multiple Writers
-// ============================================================================
 
 TEST_F(SkipListConcurrentTest, ConcurrentWritersDifferentKeys)
 {
@@ -118,9 +116,7 @@ TEST_F(SkipListConcurrentTest, ConcurrentWritersSameKeys)
         EXPECT_EQ(count, kNumThreads * kUpdatesPerKey * kNumKeys);
 }
 
-// ============================================================================
 // Multiple Readers
-// ============================================================================
 
 TEST_F(SkipListConcurrentTest, ConcurrentReaders)
 {
@@ -229,9 +225,7 @@ TEST_F(SkipListConcurrentTest, ConcurrentIterators)
         EXPECT_TRUE(all_passed.load());
 }
 
-// ============================================================================
 // Mixed Readers and Writers
-// ============================================================================
 
 TEST_F(SkipListConcurrentTest, ReadersAndWritersMixed)
 {
@@ -371,9 +365,7 @@ TEST_F(SkipListConcurrentTest, IteratorsWhileWriting)
         EXPECT_GT(iter_count.load(), 0);
 }
 
-// ============================================================================
 // Stress Tests
-// ============================================================================
 
 TEST_F(SkipListConcurrentTest, HighContentionSameKey)
 {
@@ -487,9 +479,7 @@ TEST_F(SkipListConcurrentTest, RapidFireInsertAndRead)
         EXPECT_GT(total_reads.load(), 0);
 }
 
-// ============================================================================
 // Sequence Number Ordering
-// ============================================================================
 
 TEST_F(SkipListConcurrentTest, SequenceOrderingUnderContention)
 {
