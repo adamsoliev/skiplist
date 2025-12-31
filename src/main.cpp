@@ -9,8 +9,11 @@ int main()
         // Insert some key-value pairs
         uint64_t seq = 1;
         skiplist.insert(minilsm::InternalKey("apple", seq++, minilsm::KeyType::Put), "red");
+        skiplist.insert(minilsm::InternalKey("fig", seq++, minilsm::KeyType::Put), "purple");
         skiplist.insert(minilsm::InternalKey("banana", seq++, minilsm::KeyType::Put), "yellow");
+        skiplist.insert(minilsm::InternalKey("kiwi", seq++, minilsm::KeyType::Put), "brown");
         skiplist.insert(minilsm::InternalKey("cherry", seq++, minilsm::KeyType::Put), "red");
+        skiplist.insert(minilsm::InternalKey("orange", seq++, minilsm::KeyType::Put), "orange");
 
         // Update apple with newer version
         skiplist.insert(minilsm::InternalKey("apple", seq++, minilsm::KeyType::Put), "green");
