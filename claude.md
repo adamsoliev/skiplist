@@ -9,8 +9,8 @@ Always test CI changes locally in an Ubuntu VM using multipass before pushing:
 multipass launch --name ci-test --memory 2G --disk 10G
 
 # Mount project
-multipass mount /Users/adamsoliev/Development/mini-lsm ci-test:/home/ubuntu/mini-lsm
+multipass mount /Users/adamsoliev/Development/skiplist ci-test:/home/ubuntu/skiplist
 
 # Run tests inside VM
-multipass exec ci-test -- bash -c "cd /home/ubuntu/mini-lsm && <command>"
+multipass exec ci-test -- bash -c "cd /home/ubuntu/skiplist && <command>"
 ```

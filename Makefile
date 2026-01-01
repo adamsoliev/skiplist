@@ -4,7 +4,7 @@ CXXFLAGS_BENCH = -std=c++17 -Wall -Wextra -O3 -DNDEBUG -pthread
 LDFLAGS = -pthread
 
 SRC = src/main.cpp
-TARGET = mini-lsm
+TARGET = skiplist
 
 # Google Test configuration
 GTEST_DIR = third_party/googletest
@@ -33,7 +33,15 @@ BENCH_TARGET = run_bench
 # Number of parallel test jobs (default to number of CPU cores)
 NPROCS := $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
+# Sanitizer flags
+SANITIZER_COMMON = -fno-omit-frame-pointer
+ASAN_FLAGS = -fsanitize=address $(SANITIZER_COMMON)
+TSAN_FLAGS = -fsanitize=thread $(SANITIZER_COMMON)
+UBSAN_FLAGS = -fsanitize=undefined $(SANITIZER_COMMON)
+MSAN_FLAGS = -fsanitize=memory $(SANITIZER_COMMON)
+
 .PHONY: all clean check test gtest gbench bench format format-check lint compile_commands
+.PHONY: check-asan check-tsan check-ubsan check-msan check-valgrind check-all-sanitizers
 
 all: $(TARGET)
 
@@ -92,6 +100,46 @@ check: $(TEST_TARGET)
 # Alias for check
 test: check
 
+# Sanitizer test targets (rebuild with sanitizer flags)
+check-asan: $(GTEST_BUILD_DIR)/lib/libgtest.a
+	@echo "Building and running tests with AddressSanitizer..."
+	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
+	@$(MAKE) CXXFLAGS="$(CXXFLAGS) $(ASAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(ASAN_FLAGS)" $(TEST_TARGET)
+	@ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 ./$(TEST_TARGET) --gtest_color=yes
+	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
+
+check-tsan: $(GTEST_BUILD_DIR)/lib/libgtest.a
+	@echo "Building and running tests with ThreadSanitizer..."
+	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
+	@$(MAKE) CXXFLAGS="$(CXXFLAGS) $(TSAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(TSAN_FLAGS)" $(TEST_TARGET)
+	@TSAN_OPTIONS=second_deadlock_stack=1:abort_on_error=1 ./$(TEST_TARGET) --gtest_color=yes
+	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
+
+check-ubsan: $(GTEST_BUILD_DIR)/lib/libgtest.a
+	@echo "Building and running tests with UndefinedBehaviorSanitizer..."
+	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
+	@$(MAKE) CXXFLAGS="$(CXXFLAGS) $(UBSAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(UBSAN_FLAGS)" $(TEST_TARGET)
+	@UBSAN_OPTIONS=print_stacktrace=1:abort_on_error=1 ./$(TEST_TARGET) --gtest_color=yes
+	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
+
+check-msan: $(GTEST_BUILD_DIR)/lib/libgtest.a
+	@echo "Building and running tests with MemorySanitizer..."
+	@echo "Note: MSan requires all dependencies (including libc++) to be built with MSan"
+	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
+	@$(MAKE) CXXFLAGS="$(CXXFLAGS) $(MSAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(MSAN_FLAGS)" $(TEST_TARGET)
+	@MSAN_OPTIONS=abort_on_error=1 ./$(TEST_TARGET) --gtest_color=yes
+	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
+
+# Run all sanitizers sequentially
+check-all-sanitizers: check-asan check-tsan check-ubsan
+	@echo "All sanitizer tests passed!"
+
+# Valgrind memory check
+check-valgrind: $(TEST_TARGET)
+	@echo "Running tests with Valgrind..."
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
+		--error-exitcode=1 ./$(TEST_TARGET) --gtest_color=no
+
 # Compile benchmark object files
 $(BENCH_DIR)/%.o: $(BENCH_DIR)/%.cpp $(GBENCH_BUILD_DIR)/src/libbenchmark.a
 	$(CXX) $(CXXFLAGS_BENCH) -I$(GBENCH_INCLUDE) -c $< -o $@
@@ -136,16 +184,30 @@ compile_commands: clean
 # Show help
 help:
 	@echo "Available targets:"
-	@echo "  all              - Build main executable (default)"
-	@echo "  check            - Build and run all tests"
-	@echo "  test             - Alias for check"
-	@echo "  gtest            - Download and build Google Test only"
-	@echo "  gbench           - Download and build Google Benchmark only"
-	@echo "  bench            - Build and run benchmarks"
-	@echo "  bench-ci         - Run benchmarks with JSON output"
-	@echo "  format           - Format source files with clang-format"
-	@echo "  format-check     - Check formatting without modifying files"
-	@echo "  lint             - Run clang-tidy linter"
-	@echo "  compile_commands - Generate compile_commands.json for clangd"
-	@echo "  clean            - Remove build artifacts"
-	@echo "  distclean        - Remove build artifacts, Google Test and Benchmark"
+	@echo "  all                  - Build main executable (default)"
+	@echo "  check                - Build and run all tests"
+	@echo "  test                 - Alias for check"
+	@echo ""
+	@echo "Sanitizer targets:"
+	@echo "  check-asan           - Run tests with AddressSanitizer"
+	@echo "  check-tsan           - Run tests with ThreadSanitizer"
+	@echo "  check-ubsan          - Run tests with UndefinedBehaviorSanitizer"
+	@echo "  check-msan           - Run tests with MemorySanitizer (requires MSan-built deps)"
+	@echo "  check-all-sanitizers - Run ASan, TSan, and UBSan sequentially"
+	@echo "  check-valgrind       - Run tests with Valgrind memory checker"
+	@echo ""
+	@echo "Build and benchmark:"
+	@echo "  gtest                - Download and build Google Test only"
+	@echo "  gbench               - Download and build Google Benchmark only"
+	@echo "  bench                - Build and run benchmarks"
+	@echo "  bench-ci             - Run benchmarks with JSON output"
+	@echo ""
+	@echo "Code quality:"
+	@echo "  format               - Format source files with clang-format"
+	@echo "  format-check         - Check formatting without modifying files"
+	@echo "  lint                 - Run clang-tidy linter"
+	@echo "  compile_commands     - Generate compile_commands.json for clangd"
+	@echo ""
+	@echo "Cleanup:"
+	@echo "  clean                - Remove build artifacts"
+	@echo "  distclean            - Remove build artifacts, Google Test and Benchmark"

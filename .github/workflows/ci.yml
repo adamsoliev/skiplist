@@ -48,3 +48,59 @@ jobs:
         run: |
           find src \( -name '*.cpp' -o -name '*.hpp' \) | \
             xargs -I {} clang-tidy {} -- -std=c++17
+
+  test-asan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang
+
+      - name: Run tests with AddressSanitizer
+        run: make check-asan
+
+  test-tsan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang
+
+      - name: Run tests with ThreadSanitizer
+        run: make check-tsan
+
+  test-ubsan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang
+
+      - name: Run tests with UndefinedBehaviorSanitizer
+        run: make check-ubsan
+
+  test-valgrind:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake clang valgrind
+
+      - name: Run tests with Valgrind
+        run: make check-valgrind

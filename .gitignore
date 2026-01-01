@@ -1,5 +1,5 @@
 # Build artifacts
-mini-lsm
+skiplist
 run_tests
 *.o
 *.dSYM/
