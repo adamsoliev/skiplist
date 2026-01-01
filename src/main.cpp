@@ -1,26 +1,31 @@
+#include "logger.hpp"
 #include "skiplist.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
 
 int main()
 {
+        minilsm::Logger log("skiplist");
+
         constexpr size_t NUM_KEYS = 100'000'000;  // 100 million keys
         constexpr size_t NUM_THREADS = 12;
         constexpr size_t KEY_SIZE = 16;
         constexpr size_t VALUE_SIZE = 100;
 
-        std::cout << "SkipList Multi-threaded Stress Test\n";
-        std::cout << "====================================\n";
-        std::cout << "Keys to insert: " << NUM_KEYS << "\n";
-        std::cout << "Threads: " << NUM_THREADS << "\n";
-        std::cout << "Key size: " << KEY_SIZE << " bytes\n";
-        std::cout << "Value size: " << VALUE_SIZE << " bytes\n\n";
+        log("SkipList Multi-threaded Stress Test");
+        log("====================================");
+        log("Keys to insert: ", NUM_KEYS);
+        log("Threads: ", NUM_THREADS);
+        log("Key size: ", KEY_SIZE, " bytes");
+        log("Value size: ", VALUE_SIZE, " bytes");
+        log("");
 
         minilsm::Arena arena;
         minilsm::SkipList skiplist(&arena);
@@ -39,15 +44,19 @@ int main()
                         size_t current = total_inserted.load();
                         double elapsed = std::chrono::duration<double>(now - last_time).count();
                         double rate = (current - last_count) / elapsed;
-                        std::cout << "  " << current / 1'000'000.0 << "M keys, "
-                                  << std::fixed << std::setprecision(0) << rate / 1000.0 << "K ops/sec, "
-                                  << "memory: " << arena.memory_usage() / (1024.0 * 1024.0) << " MB\n";
+
+                        std::ostringstream oss;
+                        oss << "  " << current / 1'000'000.0 << "M keys, " << std::fixed << std::setprecision(0)
+                            << rate / 1000.0 << "K ops/sec, "
+                            << "memory: " << arena.memory_usage() / (1024.0 * 1024.0) << " MB";
+                        log(oss.str());
+
                         last_count = current;
                         last_time = now;
                 }
         });
 
-        std::cout << "Inserting keys...\n";
+        log("Inserting keys...");
         auto start = std::chrono::high_resolution_clock::now();
 
         // Worker threads
@@ -84,33 +93,48 @@ int main()
 
         auto elapsed = std::chrono::duration<double>(end - start).count();
 
-        std::cout << "\n=== Results ===\n";
-        std::cout << "Total keys inserted: " << NUM_KEYS << "\n";
-        std::cout << "Threads: " << NUM_THREADS << "\n";
-        std::cout << "Total time: " << std::fixed << std::setprecision(2) << elapsed << " seconds\n";
-        std::cout << "Throughput: " << std::setprecision(0) << NUM_KEYS / elapsed << " inserts/sec\n";
-        std::cout << "Throughput: " << std::setprecision(2) << (NUM_KEYS / elapsed) / 1'000'000.0 << " M inserts/sec\n";
-        std::cout << "Arena memory: " << arena.memory_usage() / (1024.0 * 1024.0) << " MB\n";
-        std::cout << "Bytes per entry: " << static_cast<double>(arena.memory_usage()) / NUM_KEYS << "\n";
+        log("");
+        log("=== Results ===");
+        log("Total keys inserted: ", NUM_KEYS);
+        log("Threads: ", NUM_THREADS);
+
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(2) << elapsed << " seconds";
+        log("Total time: ", oss.str());
+
+        oss.str("");
+        oss << std::setprecision(0) << NUM_KEYS / elapsed << " inserts/sec";
+        log("Throughput: ", oss.str());
+
+        oss.str("");
+        oss << std::setprecision(2) << (NUM_KEYS / elapsed) / 1'000'000.0 << " M inserts/sec";
+        log("Throughput: ", oss.str());
+
+        oss.str("");
+        oss << arena.memory_usage() / (1024.0 * 1024.0) << " MB";
+        log("Arena memory: ", oss.str());
+
+        log("Bytes per entry: ", static_cast<double>(arena.memory_usage()) / NUM_KEYS);
 
         // Verify a few random lookups
-        std::cout << "\n=== Verification ===\n";
+        log("");
+        log("=== Verification ===");
         char key_buf[KEY_SIZE + 1];
         std::string result;
         std::snprintf(key_buf, sizeof(key_buf), "%016zu", size_t(0));
         if (skiplist.get(key_buf, &result))
         {
-                std::cout << "Key 0: found (value size=" << result.size() << ")\n";
+                log("Key 0: found (value size=", result.size(), ")");
         }
         std::snprintf(key_buf, sizeof(key_buf), "%016zu", NUM_KEYS / 2);
         if (skiplist.get(key_buf, &result))
         {
-                std::cout << "Key " << NUM_KEYS / 2 << ": found (value size=" << result.size() << ")\n";
+                log("Key ", NUM_KEYS / 2, ": found (value size=", result.size(), ")");
         }
         std::snprintf(key_buf, sizeof(key_buf), "%016zu", NUM_KEYS - 1);
         if (skiplist.get(key_buf, &result))
         {
-                std::cout << "Key " << NUM_KEYS - 1 << ": found (value size=" << result.size() << ")\n";
+                log("Key ", NUM_KEYS - 1, ": found (value size=", result.size(), ")");
         }
 
         return 0;
