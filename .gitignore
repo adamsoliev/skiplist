@@ -1,12 +1,16 @@
 # Build artifacts
 skiplist
 run_tests
+run_bench
+run_comp_bench
 *.o
+*.json
 *.dSYM/
 compile_commands.json
 
-# Third party dependencies
-third_party/
+# Third party dependencies (auto-downloaded)
+third_party/googletest/
+third_party/benchmark/
 
 # IDE
 .vscode/

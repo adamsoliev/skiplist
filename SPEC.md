@@ -1,190 +1,285 @@
-# Concurrent Arena Allocator Specification
+# SkipList Performance Optimization Spec
 
-## Overview
+## Problem Statement
 
-A core-sharded arena allocator designed to eliminate mutex contention in multi-threaded workloads. Replaces the existing `Arena` class.
+Comparative benchmarking against RocksDB InlineSkipList reveals minilsm insert is ~35% slower:
 
-## Architecture
+| Operation (100K items) | minilsm | RocksDB | Gap |
+|------------------------|---------|---------|-----|
+| Insert | 615K ops/s | 940K ops/s | 1.53x slower |
+| Insert Random | 677K ops/s | 796K ops/s | 1.18x slower |
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      ConcurrentArena                        │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐       ┌─────────┐     │
-│  │ Shard 0 │ │ Shard 1 │ │ Shard 2 │  ...  │ Shard N │     │
-│  │ [lock]  │ │ [lock]  │ │ [lock]  │       │ [lock]  │     │
-│  │ [block] │ │ [block] │ │ [block] │       │ [block] │     │
-│  └────┬────┘ └────┬────┘ └────┬────┘       └────┬────┘     │
-│       │           │           │                 │          │
-│       └───────────┴─────┬─────┴─────────────────┘          │
-│                         ▼                                   │
-│              ┌─────────────────────┐                       │
-│              │    Central Arena    │                       │
-│              │      [spinlock]     │                       │
-│              │   [block storage]   │                       │
-│              └─────────────────────┘                       │
-└─────────────────────────────────────────────────────────────┘
-```
+## Root Causes
 
-## Design Decisions
+### 1. Redundant Search Traversals (Primary Bottleneck)
 
-### 1. Concurrency Model
-
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Shard count | `hardware_concurrency() - 2` (configurable) | Leave cores for OS/background tasks |
-| Thread-to-shard mapping | Core ID via `sched_getcpu()` | Exploits OS soft affinity for cache locality |
-| Core ID caching | Thread-local, refresh on contention | Balance freshness vs. syscall overhead |
-| Oversubscription | Not supported | Thread count must be <= shard count |
-
-### 2. Synchronization
-
-| Component | Mechanism | Details |
-|-----------|-----------|---------|
-| Shard lock | Simple TAS spinlock | `while(flag.test_and_set(acquire))` |
-| Central lock | Spinlock with yield | Spin ~100 iterations, then `sched_yield()` |
-| Repick trigger | After 64 failed spins | Re-query core ID, try new shard |
-
-### 3. Memory Management
-
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| Chunk size | Fixed 128KB | Shards request fixed-size chunks from central |
-| Large allocation threshold | >128KB | Bypass shards, allocate directly from central |
-| Tail scavenging minimum | 1KB | Smaller fragments are wasted |
-| Cache line padding | 64 bytes | Prevent false sharing between shards |
-| Memory limit | Configurable | Constructor parameter, return nullptr on exceed |
-
-### 4. Shard Exhaustion Behavior
-
-When a shard's current block is exhausted:
-1. Thread holds shard lock while requesting chunk from central
-2. Other threads mapped to same shard **block and wait**
-3. No work stealing or shard migration during refill
-4. Rationale: Memory efficiency over latency; keeps allocations core-local
-
-### 5. API Design
+**Current behavior**: For each level in the insert, `find_predecessor_at_level()` starts from the top and traverses down:
 
 ```cpp
-class Arena {
-public:
-    // Constructor
-    explicit Arena(size_t max_bytes = 0,          // 0 = unlimited
-                   size_t num_shards = 0);        // 0 = auto (cores - 2)
+// skiplist.hpp:104-129
+for (int level = 0; level < height; level++) {
+    while (true) {
+        Node *pred = find_predecessor_at_level(stored_key, level);  // O(log n) each time!
+        ...
+    }
+}
+```
 
-    ~Arena();
+`find_predecessor_at_level()` always starts from `head_` at `max_height - 1`:
 
-    // Non-copyable, non-movable
-    Arena(const Arena&) = delete;
-    Arena& operator=(const Arena&) = delete;
+```cpp
+// skiplist.hpp:230-251
+Node *find_predecessor_at_level(const InternalKey &key, int target_level) const {
+    Node *x = head_;
+    int level = max_height_.load(std::memory_order_relaxed) - 1;  // starts at top every time
+    while (true) {
+        Node *next = x->get_next(level);
+        if (next != nullptr && next->key.compare(key) < 0) {
+            x = next;
+        } else {
+            if (level == target_level) return x;
+            level--;
+        }
+    }
+}
+```
 
-    // Allocation (thread-safe)
-    // Returns nullptr on failure (OOM or limit exceeded)
-    char* allocate(size_t bytes);
-    char* allocate_aligned(size_t bytes, size_t align);
+**Complexity**: O(height × log n) per insert instead of O(log n).
 
-    // Statistics
-    size_t memory_usage() const;  // Total bytes allocated from system
+With average height ~2.5 (branching factor 4), this is **2-3x more work** than necessary.
+
+**RocksDB approach**: Single top-down traversal caches all predecessors:
+
+```cpp
+// One traversal fills prev[0..max_height-1]
+Node* prev[kMaxPossibleHeight];
+FindGreaterOrEqual(key, prev);
+
+// Then link at each level using cached predecessors
+for (int i = 0; i < height; ++i) {
+    x->SetNext(i, prev[i]->Next(i));
+    prev[i]->SetNext(i, x);
+}
+```
+
+### 2. Multiple Memory Allocations
+
+**Current behavior**: 3 separate allocations per insert:
+
+```cpp
+// skiplist.hpp:69-85
+char *key_data = arena_->allocate(key.user_key.size());     // allocation 1
+std::memcpy(key_data, key.user_key.data(), key.user_key.size());
+
+char *val_data = arena_->allocate(value.size());            // allocation 2
+std::memcpy(val_data, value.data(), value.size());
+
+Node *x = new_node(stored_key, stored_value, height);       // allocation 3 (in new_node)
+```
+
+**RocksDB approach**: Single allocation for node + key:
+
+```cpp
+char* AllocateKey(size_t key_size) {
+    int height = RandomHeight();
+    size_t prefix = sizeof(std::atomic<Node*>) * (height - 1);
+    char* raw = allocator_->AllocateAligned(prefix + sizeof(Node) + key_size);  // 1 allocation
+    ...
+}
+```
+
+### 3. Poor Cache Locality
+
+**Current layout**: Node stores pointers to separately allocated key/value:
+
+```cpp
+struct Node {
+    InternalKey key;   // Slice (8 bytes ptr + 8 bytes size) + 8 bytes seq + enum
+    Slice value;       // 8 bytes ptr + 8 bytes size
+    int height;        // 4 bytes
+};
+// Accessing key data requires following pointer → cache miss
+```
+
+**RocksDB layout**: Key data inline immediately after node:
+
+```cpp
+struct Node {
+    std::atomic<Node*> next_[1];  // variable size array stored BEFORE node
+    // Key data stored immediately after node in same allocation
+};
+
+const char* Key() const {
+    return reinterpret_cast<const char*>(&next_[1]);  // no indirection
+}
+```
+
+---
+
+## Proposed Changes
+
+### Change 1: Cache Predecessors During Insert
+
+Replace per-level search with single traversal that caches predecessors.
+
+**File**: `src/skiplist.hpp`
+
+**Current**:
+```cpp
+void insert(const InternalKey &key, const Slice &value) {
+    ...
+    for (int level = 0; level < height; level++) {
+        while (true) {
+            Node *pred = find_predecessor_at_level(stored_key, level);
+            Node *succ = pred->get_next(level);
+            ...
+        }
+    }
+}
+```
+
+**Proposed**:
+```cpp
+void insert(const InternalKey &key, const Slice &value) {
+    ...
+    // Single traversal to find all predecessors
+    Node* prev[kMaxHeight];
+    find_greater_or_equal(stored_key, prev);
+
+    // Link at each level using cached predecessors
+    for (int level = 0; level < height; level++) {
+        while (true) {
+            Node *succ = prev[level]->get_next(level);
+
+            // Validate predecessor is still valid (for concurrent safety)
+            if (succ != nullptr && succ->key.compare(stored_key) < 0) {
+                // Another thread inserted, re-find predecessor at this level only
+                prev[level] = find_predecessor_at_level(stored_key, level);
+                continue;
+            }
+
+            x->set_next(level, succ);
+            if (prev[level]->cas_next(level, succ, x)) {
+                break;
+            }
+            // CAS failed, re-find predecessor at this level only
+            prev[level] = find_predecessor_at_level(stored_key, level);
+        }
+    }
+}
+```
+
+**Expected impact**: ~2x improvement in insert throughput.
+
+### Change 2: Batch Memory Allocation
+
+Allocate node + key + value in a single arena call.
+
+**File**: `src/skiplist.hpp`
+
+**Current**:
+```cpp
+void insert(const InternalKey &key, const Slice &value) {
+    char *key_data = arena_->allocate(key.user_key.size());
+    std::memcpy(key_data, ...);
+
+    char *val_data = arena_->allocate(value.size());
+    std::memcpy(val_data, ...);
+
+    Node *x = new_node(stored_key, stored_value, height);
+}
+```
+
+**Proposed**:
+```cpp
+void insert(const InternalKey &key, const Slice &value) {
+    int height = random_height();
+
+    // Single allocation: next pointers + Node + key + value
+    size_t alloc_size = sizeof(std::atomic<Node*>) * height
+                      + sizeof(Node)
+                      + key.user_key.size()
+                      + value.size();
+
+    char* mem = arena_->allocate_aligned(alloc_size, alignof(std::atomic<Node*>));
+
+    // Layout: [next[height-1]..next[0]][Node][key_data][value_data]
+    Node* node = reinterpret_cast<Node*>(mem + sizeof(std::atomic<Node*>) * height);
+    char* key_data = reinterpret_cast<char*>(node + 1);
+    char* val_data = key_data + key.user_key.size();
+
+    std::memcpy(key_data, key.user_key.data(), key.user_key.size());
+    std::memcpy(val_data, value.data(), value.size());
+
+    // Initialize node with pointers to inline data
+    new (node) Node();
+    node->key = InternalKey(Slice(key_data, key.user_key.size()), key.sequence, key.type);
+    node->value = Slice(val_data, value.size());
+    node->height = height;
+    ...
+}
+```
+
+**Expected impact**: ~10-20% improvement (reduces allocator contention and improves locality).
+
+### Change 3: Inline Key Storage (Optional, Larger Change)
+
+Store key data directly in the node structure like RocksDB.
+
+**File**: `src/skiplist.hpp`
+
+This requires restructuring Node to be variable-sized:
+
+```cpp
+struct Node {
+    uint32_t key_size;
+    uint32_t value_size;
+    uint64_t sequence;
+    KeyType type;
+    int height;
+    // Key and value data follow immediately after
+
+    const char* key_data() const {
+        return reinterpret_cast<const char*>(this + 1);
+    }
+    const char* value_data() const {
+        return key_data() + key_size;
+    }
+    Slice user_key() const {
+        return Slice(key_data(), key_size);
+    }
+    Slice value() const {
+        return Slice(value_data(), value_size);
+    }
 };
 ```
 
-### 6. Error Handling
+**Expected impact**: ~5-10% improvement (eliminates pointer chasing in comparisons).
 
-| Condition | Behavior |
-|-----------|----------|
-| Allocation failure (OOM) | Return `nullptr` |
-| Memory limit exceeded | Return `nullptr` |
-| Reset/reclaim | Not supported; destroy and recreate arena |
+**Trade-off**: More complex code, breaks existing API slightly.
 
-## Internal Structures
+---
 
-### Shard
+## Implementation Order
 
-```cpp
-struct alignas(64) Shard {
-    std::atomic_flag lock = ATOMIC_FLAG_INIT;
-    char* block_ptr = nullptr;      // Current position in block
-    size_t block_remaining = 0;     // Bytes remaining in current block
-    // Padding to 64 bytes for cache line isolation
-};
+1. **Change 1** (Cache Predecessors) - Highest impact, moderate complexity
+2. **Change 2** (Batch Allocation) - Medium impact, low complexity
+3. **Change 3** (Inline Storage) - Lower impact, higher complexity (optional)
+
+## Validation
+
+Run comparative benchmark after each change:
+
+```bash
+make clean && make run_comp_bench
+./run_comp_bench --benchmark_filter="Insert" --benchmark_color=true
 ```
 
-### Central Arena
+Target: Match or exceed RocksDB insert performance (~900K+ ops/s at 100K items).
 
-- Owns all allocated memory blocks (vector of unique_ptr)
-- Protected by yielding spinlock
-- Tracks total memory usage (atomic counter)
-- Handles large allocations (>128KB) directly
+## References
 
-## Allocation Flow
-
-```
-allocate(size):
-    if size > 128KB:
-        return central_allocate(size)  // Direct path
-
-    shard_idx = get_cached_core_id()
-    spin_count = 0
-
-    while true:
-        if try_lock(shards[shard_idx]):
-            result = shard_allocate(shard_idx, size)
-            unlock(shards[shard_idx])
-            return result
-
-        spin_count++
-        if spin_count >= 64:
-            shard_idx = repick()  // Re-query core ID
-            spin_count = 0
-
-shard_allocate(idx, size):
-    if shards[idx].block_remaining >= size:
-        ptr = shards[idx].block_ptr
-        shards[idx].block_ptr += size
-        shards[idx].block_remaining -= size
-        return ptr
-
-    // Need new chunk from central
-    new_block = central_allocate_chunk(128KB)
-    if new_block == nullptr:
-        return nullptr
-
-    shards[idx].block_ptr = new_block
-    shards[idx].block_remaining = 128KB
-    return shard_allocate(idx, size)  // Retry
-
-repick():
-    refresh thread-local core ID via sched_getcpu()
-    return core_id % num_shards
-```
-
-## Memory Layout
-
-```
-Shard 0 (64 bytes, cache-line aligned):
-┌────────────────┬────────────────┬────────────────┬──────────┐
-│  atomic_flag   │   block_ptr    │ block_remaining│ padding  │
-│   (1 byte)     │   (8 bytes)    │   (8 bytes)    │(47 bytes)│
-└────────────────┴────────────────┴────────────────┴──────────┘
-
-Shard 1 (64 bytes, cache-line aligned):
-┌────────────────┬────────────────┬────────────────┬──────────┐
-│  atomic_flag   │   block_ptr    │ block_remaining│ padding  │
-└────────────────┴────────────────┴────────────────┴──────────┘
-...
-```
-
-## Performance Expectations
-
-| Scenario | Before (mutex) | After (sharded) |
-|----------|----------------|-----------------|
-| Single-threaded | ~same | ~same (slight overhead from shard lookup) |
-| 12 threads, 12 cores | Heavy contention (~40% in mutex) | Near-linear scaling |
-| Allocation latency | Variable (lock contention) | Consistent (core-local) |
-
-## Constraints
-
-1. Thread count must not exceed shard count
-2. No memory reclamation without destroying arena
-3. Large allocations (>128KB) bypass sharding benefits
-4. Relies on OS soft affinity; explicit thread pinning not required
+- RocksDB InlineSkipList: `third_party/rocksdb/inlineskiplist.h`
+- Current implementation: `src/skiplist.hpp`
+- Benchmark: `bench/comparative_bench.cpp`
+- Previous arena spec: `old/SPEC-arena.md`

@@ -46,9 +46,15 @@ TEST_TARGET = run_tests
 
 # Benchmark configuration
 BENCH_DIR = bench
-BENCH_SOURCES = $(wildcard $(BENCH_DIR)/*.cpp)
+BENCH_SOURCES = $(BENCH_DIR)/skiplist_bench.cpp
 BENCH_OBJECTS = $(BENCH_SOURCES:.cpp=.o)
 BENCH_TARGET = run_bench
+
+# Comparative benchmark configuration
+COMP_BENCH_SOURCES = $(BENCH_DIR)/comparative_bench.cpp
+COMP_BENCH_OBJECTS = $(COMP_BENCH_SOURCES:.cpp=.o)
+COMP_BENCH_TARGET = run_comp_bench
+REDIS_SKIPLIST_OBJ = third_party/redis/zskiplist.o
 
 # Profiling configuration
 PERF = /usr/lib/linux-tools-6.8.0-31/perf
@@ -66,7 +72,7 @@ ASAN_FLAGS = -fsanitize=address -fno-omit-frame-pointer
 TSAN_FLAGS = -fsanitize=thread -fno-omit-frame-pointer
 UBSAN_FLAGS = -fsanitize=undefined -fno-omit-frame-pointer
 
-.PHONY: all clean test bench sanitizers valgrind
+.PHONY: all clean test bench comp-bench sanitizers valgrind
 .PHONY: format format-check lint compile_commands
 .PHONY: perf-record perf-report perf-stat perf-annotate flamegraph aperf-record aperf-report
 .PHONY: help
@@ -158,6 +164,24 @@ $(BENCH_TARGET): $(BENCH_OBJECTS) $(GBENCH_BUILD_DIR)/src/libbenchmark.a
 bench: $(BENCH_TARGET)
 	@./$(BENCH_TARGET) --benchmark_color=true --benchmark_format=json --benchmark_out=benchmark_results.json
 
+# === Comparative Benchmark ===
+
+# Compile Redis zskiplist C code
+$(REDIS_SKIPLIST_OBJ): third_party/redis/zskiplist.c third_party/redis/zskiplist.h
+	$(CC) -c -O3 -std=c11 -I third_party/redis -o $@ $<
+
+# Compile comparative benchmark
+$(BENCH_DIR)/comparative_bench.o: $(BENCH_DIR)/comparative_bench.cpp $(GBENCH_BUILD_DIR)/src/libbenchmark.a
+	$(CXX) $(CXXFLAGS_BENCH) -I$(GBENCH_INCLUDE) -c $< -o $@
+
+# Link comparative benchmark
+$(COMP_BENCH_TARGET): $(COMP_BENCH_OBJECTS) $(REDIS_SKIPLIST_OBJ) $(GBENCH_BUILD_DIR)/src/libbenchmark.a
+	$(CXX) $(CXXFLAGS_BENCH) $(LDFLAGS) -o $@ $(COMP_BENCH_OBJECTS) $(REDIS_SKIPLIST_OBJ) \
+		-L$(GBENCH_LIB) -lbenchmark -lbenchmark_main
+
+comp-bench: $(COMP_BENCH_TARGET)
+	@./$(COMP_BENCH_TARGET) --benchmark_color=true --benchmark_format=json --benchmark_out=comp_benchmark_results.json
+
 # === Profiling ===
 
 perf-record: $(TARGET)
@@ -204,6 +228,7 @@ compile_commands: clean
 
 clean:
 	rm -f $(TARGET) $(TEST_TARGET) $(TEST_OBJECTS) $(BENCH_TARGET) $(BENCH_OBJECTS) benchmark_results.json
+	rm -f $(COMP_BENCH_TARGET) $(COMP_BENCH_OBJECTS) $(REDIS_SKIPLIST_OBJ) comp_benchmark_results.json
 
 distclean: clean
 	rm -rf third_party
@@ -223,6 +248,7 @@ help:
 	@echo "  sanitizers   Run tests with ASan, TSan, UBSan"
 	@echo "  valgrind     Run tests with Valgrind"
 	@echo "  bench        Run benchmarks (outputs JSON)"
+	@echo "  comp-bench   Run comparative benchmark (minilsm vs RocksDB vs Redis)"
 	@echo ""
 	@echo "Profile (requires sudo):"
 	@echo "  perf-stat    Show CPU counters (cycles, stalls, cache/branch misses)"
