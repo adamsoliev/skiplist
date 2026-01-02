@@ -1,116 +1,190 @@
-# Mini LSM Tree Specification
+# Concurrent Arena Allocator Specification
 
-## SkipList
+## Overview
 
-Lock-free concurrent ordered map for MemTable.
+A core-sharded arena allocator designed to eliminate mutex contention in multi-threaded workloads. Replaces the existing `Arena` class.
 
-### Key Structure
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      ConcurrentArena                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐       ┌─────────┐     │
+│  │ Shard 0 │ │ Shard 1 │ │ Shard 2 │  ...  │ Shard N │     │
+│  │ [lock]  │ │ [lock]  │ │ [lock]  │       │ [lock]  │     │
+│  │ [block] │ │ [block] │ │ [block] │       │ [block] │     │
+│  └────┬────┘ └────┬────┘ └────┬────┘       └────┬────┘     │
+│       │           │           │                 │          │
+│       └───────────┴─────┬─────┴─────────────────┘          │
+│                         ▼                                   │
+│              ┌─────────────────────┐                       │
+│              │    Central Arena    │                       │
+│              │      [spinlock]     │                       │
+│              │   [block storage]   │                       │
+│              └─────────────────────┘                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Design Decisions
+
+### 1. Concurrency Model
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Shard count | `hardware_concurrency() - 2` (configurable) | Leave cores for OS/background tasks |
+| Thread-to-shard mapping | Core ID via `sched_getcpu()` | Exploits OS soft affinity for cache locality |
+| Core ID caching | Thread-local, refresh on contention | Balance freshness vs. syscall overhead |
+| Oversubscription | Not supported | Thread count must be <= shard count |
+
+### 2. Synchronization
+
+| Component | Mechanism | Details |
+|-----------|-----------|---------|
+| Shard lock | Simple TAS spinlock | `while(flag.test_and_set(acquire))` |
+| Central lock | Spinlock with yield | Spin ~100 iterations, then `sched_yield()` |
+| Repick trigger | After 64 failed spins | Re-query core ID, try new shard |
+
+### 3. Memory Management
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Chunk size | Fixed 128KB | Shards request fixed-size chunks from central |
+| Large allocation threshold | >128KB | Bypass shards, allocate directly from central |
+| Tail scavenging minimum | 1KB | Smaller fragments are wasted |
+| Cache line padding | 64 bytes | Prevent false sharing between shards |
+| Memory limit | Configurable | Constructor parameter, return nullptr on exceed |
+
+### 4. Shard Exhaustion Behavior
+
+When a shard's current block is exhausted:
+1. Thread holds shard lock while requesting chunk from central
+2. Other threads mapped to same shard **block and wait**
+3. No work stealing or shard migration during refill
+4. Rationale: Memory efficiency over latency; keeps allocations core-local
+
+### 5. API Design
 
 ```cpp
-struct InternalKey {
-    Slice user_key;      // raw bytes + length (non-owning view)
-    uint64_t sequence;   // monotonic sequence number
-    KeyType type;        // put, delete, range_put, range_delete, update, range_update
-};
-```
-
-### Value Structure
-
-```cpp
-struct Slice {
-    const char* data;
-    size_t size;
-};
-// Non-owning view, data lives in arena
-```
-
-### Ordering
-
-- Keys ordered: `user_key ASC, sequence DESC`
-- Same user key → newest (highest sequence) comes first
-- Readers pick first match (most recent version)
-
-### Node Layout
-
-```
-Memory layout (negative offset addressing):
-
-    [next[height-1]] ← highest level pointer
-    [next[height-2]]
-    ...
-    [next[1]]
-    [next[0]]        ← base level pointer
-    [Node struct]    ← node pointer points here
-        - key
-        - value
-        - height
-```
-
-Single allocation per node. Forward pointers stored before Node struct for cache locality.
-
-### Concurrency Model
-
-- **Reads**: Lock-free, acquire semantics on pointer loads
-- **Writes**: Lock-free insertions, release semantics on pointer stores
-- **Deletes**: None during operation (append-only with tombstones)
-- **Reclamation**: Entire skiplist destroyed on memtable flush
-
-### Height Selection
-
-- Probabilistic with branching factor (default: 4, i.e., p=0.25)
-- Each level has 1/branching_factor probability
-- Max height configurable (default: 12)
-
-### Memory Allocation
-
-- Arena allocator (bump pointer from large blocks)
-- All memory freed at once on flush
-- No per-node deallocation
-
-### Operations
-
-```cpp
-class SkipList {
+class Arena {
 public:
-    // Insert key-value (allows duplicate user keys with different sequences)
-    void insert(const InternalKey& key, const Slice& value);
+    // Constructor
+    explicit Arena(size_t max_bytes = 0,          // 0 = unlimited
+                   size_t num_shards = 0);        // 0 = auto (cores - 2)
 
-    // Point lookup (returns newest version for user key)
-    bool get(const Slice& user_key, std::string* value);
+    ~Arena();
 
-    // Iterator (live view, sees concurrent modifications)
-    class Iterator {
-        void seek(const Slice& target);
-        void seek_to_first();
-        void next();
-        bool valid();
-        Slice key();
-        Slice value();
-    };
+    // Non-copyable, non-movable
+    Arena(const Arena&) = delete;
+    Arena& operator=(const Arena&) = delete;
+
+    // Allocation (thread-safe)
+    // Returns nullptr on failure (OOM or limit exceeded)
+    char* allocate(size_t bytes);
+    char* allocate_aligned(size_t bytes, size_t align);
+
+    // Statistics
+    size_t memory_usage() const;  // Total bytes allocated from system
 };
 ```
 
-### Conflict Resolution
+### 6. Error Handling
 
-Multiple inserts with same user key: both inserted with different sequences. Reader sees newest.
+| Condition | Behavior |
+|-----------|----------|
+| Allocation failure (OOM) | Return `nullptr` |
+| Memory limit exceeded | Return `nullptr` |
+| Reset/reclaim | Not supported; destroy and recreate arena |
 
-### Configuration
+## Internal Structures
 
-| Parameter        | Default | Description                    |
-|------------------|---------|--------------------------------|
-| memtable_size    | 64 MB   | Flush threshold                |
-| branching_factor | 4       | Height probability (p=1/bf)    |
-| max_height       | 12      | Maximum skiplist height        |
-
-### KeyType Enum
+### Shard
 
 ```cpp
-enum class KeyType : uint8_t {
-    Put,
-    Delete,
-    RangePut,
-    RangeDelete,
-    Update,
-    RangeUpdate
+struct alignas(64) Shard {
+    std::atomic_flag lock = ATOMIC_FLAG_INIT;
+    char* block_ptr = nullptr;      // Current position in block
+    size_t block_remaining = 0;     // Bytes remaining in current block
+    // Padding to 64 bytes for cache line isolation
 };
 ```
+
+### Central Arena
+
+- Owns all allocated memory blocks (vector of unique_ptr)
+- Protected by yielding spinlock
+- Tracks total memory usage (atomic counter)
+- Handles large allocations (>128KB) directly
+
+## Allocation Flow
+
+```
+allocate(size):
+    if size > 128KB:
+        return central_allocate(size)  // Direct path
+
+    shard_idx = get_cached_core_id()
+    spin_count = 0
+
+    while true:
+        if try_lock(shards[shard_idx]):
+            result = shard_allocate(shard_idx, size)
+            unlock(shards[shard_idx])
+            return result
+
+        spin_count++
+        if spin_count >= 64:
+            shard_idx = repick()  // Re-query core ID
+            spin_count = 0
+
+shard_allocate(idx, size):
+    if shards[idx].block_remaining >= size:
+        ptr = shards[idx].block_ptr
+        shards[idx].block_ptr += size
+        shards[idx].block_remaining -= size
+        return ptr
+
+    // Need new chunk from central
+    new_block = central_allocate_chunk(128KB)
+    if new_block == nullptr:
+        return nullptr
+
+    shards[idx].block_ptr = new_block
+    shards[idx].block_remaining = 128KB
+    return shard_allocate(idx, size)  // Retry
+
+repick():
+    refresh thread-local core ID via sched_getcpu()
+    return core_id % num_shards
+```
+
+## Memory Layout
+
+```
+Shard 0 (64 bytes, cache-line aligned):
+┌────────────────┬────────────────┬────────────────┬──────────┐
+│  atomic_flag   │   block_ptr    │ block_remaining│ padding  │
+│   (1 byte)     │   (8 bytes)    │   (8 bytes)    │(47 bytes)│
+└────────────────┴────────────────┴────────────────┴──────────┘
+
+Shard 1 (64 bytes, cache-line aligned):
+┌────────────────┬────────────────┬────────────────┬──────────┐
+│  atomic_flag   │   block_ptr    │ block_remaining│ padding  │
+└────────────────┴────────────────┴────────────────┴──────────┘
+...
+```
+
+## Performance Expectations
+
+| Scenario | Before (mutex) | After (sharded) |
+|----------|----------------|-----------------|
+| Single-threaded | ~same | ~same (slight overhead from shard lookup) |
+| 12 threads, 12 cores | Heavy contention (~40% in mutex) | Near-linear scaling |
+| Allocation latency | Variable (lock contention) | Consistent (core-local) |
+
+## Constraints
+
+1. Thread count must not exceed shard count
+2. No memory reclamation without destroying arena
+3. Large allocations (>128KB) bypass sharding benefits
+4. Relies on OS soft affinity; explicit thread pinning not required
