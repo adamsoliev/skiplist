@@ -23,9 +23,36 @@ class SkipList
 
         struct Node
         {
-                InternalKey key;
-                Slice value;
+                uint32_t key_size;
+                uint32_t value_size;
+                uint64_t sequence;
+                KeyType type;
                 int height;
+
+                // Key and value data stored immediately after Node
+                const char *key_data() const { return reinterpret_cast<const char *>(this + 1); }
+                char *key_data() { return reinterpret_cast<char *>(this + 1); }
+                const char *value_data() const { return key_data() + key_size; }
+                char *value_data() { return key_data() + key_size; }
+
+                Slice user_key() const { return Slice(key_data(), key_size); }
+                Slice value() const { return Slice(value_data(), value_size); }
+
+                InternalKey get_key() const { return InternalKey(user_key(), sequence, type); }
+
+                // Compare this node's key with an InternalKey
+                int compare_key(const InternalKey &other) const
+                {
+                        int r = user_key().compare(other.user_key);
+                        if (r != 0)
+                                return r;
+                        // Descending by sequence: higher sequence = smaller (comes first)
+                        if (sequence > other.sequence)
+                                return -1;
+                        if (sequence < other.sequence)
+                                return 1;
+                        return 0;
+                }
 
                 // Next pointers are stored BEFORE this struct in memory
                 // Access via next(level) method
@@ -66,24 +93,6 @@ class SkipList
         // Lock-free implementation using CAS
         void insert(const InternalKey &key, const Slice &value)
         {
-                // Copy key and value data into arena
-                Slice stored_key_data;
-                if (key.user_key.size() > 0)
-                {
-                        char *key_data = arena_->allocate(key.user_key.size());
-                        std::memcpy(key_data, key.user_key.data(), key.user_key.size());
-                        stored_key_data = Slice(key_data, key.user_key.size());
-                }
-                InternalKey stored_key(stored_key_data, key.sequence, key.type);
-
-                Slice stored_value;
-                if (value.size() > 0)
-                {
-                        char *val_data = arena_->allocate(value.size());
-                        std::memcpy(val_data, value.data(), value.size());
-                        stored_value = Slice(val_data, value.size());
-                }
-
                 int height = random_height();
 
                 // Update max height using CAS
@@ -97,34 +106,67 @@ class SkipList
                         // current_max is updated by compare_exchange_weak on failure
                 }
 
-                // Create node
-                Node *x = new_node(stored_key, stored_value, height);
+                // Single allocation: [next pointers][Node][key data][value data]
+                size_t key_size = key.user_key.size();
+                size_t val_size = value.size();
+                size_t alloc_size = sizeof(std::atomic<Node *>) * height + sizeof(Node) + key_size + val_size;
+                char *mem = arena_->allocate_aligned(alloc_size, alignof(std::atomic<Node *>));
+
+                // Layout pointers
+                Node *x = reinterpret_cast<Node *>(mem + sizeof(std::atomic<Node *>) * height);
+
+                // Initialize node with inline data
+                x->key_size = static_cast<uint32_t>(key_size);
+                x->value_size = static_cast<uint32_t>(val_size);
+                x->sequence = key.sequence;
+                x->type = key.type;
+                x->height = height;
+
+                // Copy key and value data inline (after Node)
+                if (key_size > 0)
+                {
+                        std::memcpy(x->key_data(), key.user_key.data(), key_size);
+                }
+                if (val_size > 0)
+                {
+                        std::memcpy(x->value_data(), value.data(), val_size);
+                }
+
+                InternalKey stored_key = x->get_key();
+
+                // Single traversal to cache all predecessors
+                Node *prev[kMaxHeight];
+                find_greater_or_equal(stored_key, prev);
 
                 // Link node at each level using CAS, bottom-up
                 for (int level = 0; level < height; level++)
                 {
                         while (true)
                         {
-                                // Find predecessor at this level
-                                Node *pred = find_predecessor_at_level(stored_key, level);
-                                Node *succ = pred->get_next(level);
+                                Node *succ = prev[level]->get_next(level);
 
-                                // Validate that succ is actually >= our key (or null)
-                                // If succ < our key, another thread inserted and we need to re-search
-                                if (succ != nullptr && succ->key.compare(stored_key) < 0)
+                                // Walk forward if predecessor is stale (another insert happened)
+                                while (succ != nullptr && succ->compare_key(stored_key) < 0)
                                 {
-                                        continue; // Re-search for correct predecessor
+                                        prev[level] = succ;
+                                        succ = succ->get_next(level);
                                 }
 
                                 // Set our next pointer
                                 x->set_next(level, succ);
 
                                 // Try to link
-                                if (pred->cas_next(level, succ, x))
+                                if (prev[level]->cas_next(level, succ, x))
                                 {
                                         break; // Success, move to next level
                                 }
-                                // CAS failed, retry - another thread modified pred->next
+                                // CAS failed - walk forward from current position to find new predecessor
+                                succ = prev[level]->get_next(level);
+                                while (succ != nullptr && succ->compare_key(stored_key) < 0)
+                                {
+                                        prev[level] = succ;
+                                        succ = succ->get_next(level);
+                                }
                         }
                 }
         }
@@ -137,15 +179,15 @@ class SkipList
                 InternalKey lookup_key(user_key, kMaxSequenceNumber, KeyType::Put);
                 Node *x = find_greater_or_equal(lookup_key, nullptr);
 
-                if (x != nullptr && x->key.user_key == user_key)
+                if (x != nullptr && x->user_key() == user_key)
                 {
-                        if (x->key.type == KeyType::Delete)
+                        if (x->type == KeyType::Delete)
                         {
                                 return false; // tombstone
                         }
                         if (value != nullptr)
                         {
-                                *value = x->value.to_string();
+                                *value = x->value().to_string();
                         }
                         return true;
                 }
@@ -159,16 +201,16 @@ class SkipList
 
                 bool valid() const { return node_ != nullptr; }
 
-                const InternalKey &key() const
+                InternalKey key() const
                 {
                         assert(valid());
-                        return node_->key;
+                        return node_->get_key();
                 }
 
                 Slice value() const
                 {
                         assert(valid());
-                        return node_->value;
+                        return node_->value();
                 }
 
                 void next()
@@ -180,7 +222,7 @@ class SkipList
                 void prev()
                 {
                         assert(valid());
-                        node_ = list_->find_less_than(node_->key);
+                        node_ = list_->find_less_than(node_->get_key());
                 }
 
                 void seek(const Slice &target)
@@ -201,16 +243,29 @@ class SkipList
       private:
         Node *new_node(const InternalKey &key, const Slice &value, int height)
         {
-                // Memory layout: [next[height-1]] ... [next[0]] [Node]
-                size_t alloc_size = sizeof(std::atomic<Node *>) * height + sizeof(Node);
+                // Memory layout: [next pointers][Node][key data][value data]
+                size_t key_size = key.user_key.size();
+                size_t val_size = value.size();
+                size_t alloc_size = sizeof(std::atomic<Node *>) * height + sizeof(Node) + key_size + val_size;
                 char *mem = arena_->allocate_aligned(alloc_size, alignof(std::atomic<Node *>));
 
-                // Node pointer is at the end
+                // Node pointer is at the end of next pointers
                 Node *node = reinterpret_cast<Node *>(mem + sizeof(std::atomic<Node *>) * height);
-                new (node) Node();
-                node->key = key;
-                node->value = value;
+                node->key_size = static_cast<uint32_t>(key_size);
+                node->value_size = static_cast<uint32_t>(val_size);
+                node->sequence = key.sequence;
+                node->type = key.type;
                 node->height = height;
+
+                // Copy key and value data inline
+                if (key_size > 0)
+                {
+                        std::memcpy(node->key_data(), key.user_key.data(), key_size);
+                }
+                if (val_size > 0)
+                {
+                        std::memcpy(node->value_data(), value.data(), val_size);
+                }
 
                 return node;
         }
@@ -235,7 +290,7 @@ class SkipList
                 while (true)
                 {
                         Node *next = x->get_next(level);
-                        if (next != nullptr && next->key.compare(key) < 0)
+                        if (next != nullptr && next->compare_key(key) < 0)
                         {
                                 x = next;
                         }
@@ -260,7 +315,7 @@ class SkipList
                 while (true)
                 {
                         Node *next = x->get_next(level);
-                        if (next != nullptr && next->key.compare(key) < 0)
+                        if (next != nullptr && next->compare_key(key) < 0)
                         {
                                 // Keep searching at this level
                                 x = next;
@@ -290,7 +345,7 @@ class SkipList
                 while (true)
                 {
                         Node *next = x->get_next(level);
-                        if (next != nullptr && next->key.compare(key) < 0)
+                        if (next != nullptr && next->compare_key(key) < 0)
                         {
                                 x = next;
                         }
