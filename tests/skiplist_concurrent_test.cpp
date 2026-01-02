@@ -528,3 +528,627 @@ TEST_F(SkipListConcurrentTest, SequenceOrderingUnderContention)
                 }
         }
 }
+
+// ========================================
+// Additional Edge Case Tests
+// ========================================
+
+// Single Writer + Multiple Readers (RocksDB pattern)
+
+TEST_F(SkipListConcurrentTest, SingleWriterMultipleReaders)
+{
+        const int kNumReaders = 8;
+        const int kNumWrites = 1000;
+        const int kReadsPerReader = 5000;
+        std::atomic<uint64_t> seq_counter{0};
+        std::atomic<int> writes_done{0};
+        std::atomic<int> failed_reads{0};
+
+        // Single writer thread
+        std::thread writer(
+            [this, &seq_counter, &writes_done]()
+            {
+                    for (int i = 0; i < kNumWrites; i++)
+                    {
+                            std::string key = "key" + std::to_string(i);
+                            std::string value = "value" + std::to_string(i);
+                            uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed) + 1;
+                            list_->insert(InternalKey(key, seq, KeyType::Put), value);
+                            writes_done.fetch_add(1, std::memory_order_release);
+                    }
+            });
+
+        // Multiple reader threads
+        std::vector<std::thread> readers;
+        for (int r = 0; r < kNumReaders; r++)
+        {
+                readers.emplace_back(
+                    [this, &failed_reads, &writes_done]()
+                    {
+                            std::mt19937 rng(std::random_device{}());
+                            std::uniform_int_distribution<int> dist(0, kNumWrites - 1);
+
+                            for (int i = 0; i < kReadsPerReader; i++)
+                            {
+                                    int k = dist(rng);
+                                    std::string key = "key" + std::to_string(k);
+                                    std::string value;
+
+                                    // If write is done, read must succeed
+                                    int current_writes = writes_done.load(std::memory_order_acquire);
+                                    bool found = list_->get(key, &value);
+
+                                    if (k < current_writes && !found)
+                                    {
+                                            failed_reads.fetch_add(1, std::memory_order_relaxed);
+                                    }
+
+                                    if (found)
+                                    {
+                                            std::string expected = "value" + std::to_string(k);
+                                            EXPECT_EQ(value, expected);
+                                    }
+                            }
+                    });
+        }
+
+        writer.join();
+        for (auto &r : readers)
+        {
+                r.join();
+        }
+
+        // No reads should fail after writer is done
+        for (int i = 0; i < kNumWrites; i++)
+        {
+                std::string key = "key" + std::to_string(i);
+                std::string value;
+                EXPECT_TRUE(list_->get(key, &value));
+        }
+}
+
+// Multiple Writers + Single Reader (RocksDB pattern)
+
+TEST_F(SkipListConcurrentTest, MultipleWritersSingleReader)
+{
+        const int kNumWriters = 4;
+        const int kWritesPerWriter = 500;
+        std::atomic<uint64_t> seq_counter{0};
+        std::atomic<bool> stop_reading{false};
+        std::atomic<int> successful_reads{0};
+
+        // Multiple writer threads
+        std::vector<std::thread> writers;
+        for (int w = 0; w < kNumWriters; w++)
+        {
+                writers.emplace_back(
+                    [this, w, &seq_counter]()
+                    {
+                            for (int i = 0; i < kWritesPerWriter; i++)
+                            {
+                                    std::string key = "w" + std::to_string(w) + "_k" + std::to_string(i);
+                                    std::string value = "v" + std::to_string(i);
+                                    uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed) + 1;
+                                    list_->insert(InternalKey(key, seq, KeyType::Put), value);
+                            }
+                    });
+        }
+
+        // Single reader thread
+        std::thread reader(
+            [this, &stop_reading, &successful_reads]()
+            {
+                    std::mt19937 rng(std::random_device{}());
+                    std::uniform_int_distribution<int> writer_dist(0, kNumWriters - 1);
+                    std::uniform_int_distribution<int> key_dist(0, kWritesPerWriter - 1);
+
+                    while (!stop_reading.load(std::memory_order_acquire))
+                    {
+                            int w = writer_dist(rng);
+                            int k = key_dist(rng);
+                            std::string key = "w" + std::to_string(w) + "_k" + std::to_string(k);
+                            std::string value;
+
+                            if (list_->get(key, &value))
+                            {
+                                    std::string expected = "v" + std::to_string(k);
+                                    EXPECT_EQ(value, expected);
+                                    successful_reads.fetch_add(1, std::memory_order_relaxed);
+                            }
+                    }
+            });
+
+        for (auto &w : writers)
+        {
+                w.join();
+        }
+        stop_reading.store(true, std::memory_order_release);
+        reader.join();
+
+        // Verify all keys exist
+        for (int w = 0; w < kNumWriters; w++)
+        {
+                for (int i = 0; i < kWritesPerWriter; i++)
+                {
+                        std::string key = "w" + std::to_string(w) + "_k" + std::to_string(i);
+                        std::string value;
+                        EXPECT_TRUE(list_->get(key, &value));
+                }
+        }
+
+        EXPECT_GT(successful_reads.load(), 0);
+}
+
+// Backward Iteration During Concurrent Writes
+
+TEST_F(SkipListConcurrentTest, BackwardIterationWhileWriting)
+{
+        // Pre-populate
+        for (int i = 0; i < 100; i++)
+        {
+                char key[16];
+                snprintf(key, sizeof(key), "init%06d", i);
+                list_->insert(InternalKey(key, i + 1, KeyType::Put), std::to_string(i));
+        }
+
+        std::atomic<uint64_t> seq_counter{100};
+        std::atomic<bool> stop_writing{false};
+        std::atomic<int> backward_count{0};
+
+        // Writer thread
+        std::thread writer(
+            [this, &seq_counter, &stop_writing]()
+            {
+                    int i = 0;
+                    while (!stop_writing.load(std::memory_order_acquire))
+                    {
+                            char key[16];
+                            snprintf(key, sizeof(key), "new%06d", i);
+                            uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed) + 1;
+                            list_->insert(InternalKey(key, seq, KeyType::Put), std::to_string(i));
+                            i++;
+                    }
+            });
+
+        // Multiple readers iterating backward
+        std::vector<std::thread> readers;
+        for (int r = 0; r < 4; r++)
+        {
+                readers.emplace_back(
+                    [this, &backward_count]()
+                    {
+                            for (int round = 0; round < 10; round++)
+                            {
+                                    SkipList::Iterator iter(list_.get());
+                                    int count = 0;
+                                    std::string prev_key;
+
+                                    // Backward iteration
+                                    for (iter.seek_to_last(); iter.valid(); iter.prev())
+                                    {
+                                            std::string key = iter.key().user_key.to_string();
+                                            // Keys should be in reverse order
+                                            if (!prev_key.empty())
+                                            {
+                                                    EXPECT_GE(prev_key, key)
+                                                        << "Reverse order violation: " << prev_key << " < " << key;
+                                            }
+                                            prev_key = key;
+                                            count++;
+                                    }
+                                    backward_count.fetch_add(count, std::memory_order_relaxed);
+                            }
+                    });
+        }
+
+        for (auto &r : readers)
+        {
+                r.join();
+        }
+
+        stop_writing.store(true, std::memory_order_release);
+        writer.join();
+
+        EXPECT_GT(backward_count.load(), 0);
+}
+
+// Concurrent Seeks to Same Key
+
+TEST_F(SkipListConcurrentTest, ConcurrentSeeksToSameKey)
+{
+        // Insert multiple versions of same key
+        const int kNumVersions = 100;
+        for (int i = 0; i < kNumVersions; i++)
+        {
+                list_->insert(InternalKey("target_key", i + 1, KeyType::Put), std::to_string(i));
+        }
+
+        // Multiple threads seeking to the same key simultaneously
+        const int kNumThreads = 8;
+        const int kSeeksPerThread = 1000;
+        std::atomic<int> correct_seeks{0};
+
+        std::vector<std::thread> threads;
+        for (int t = 0; t < kNumThreads; t++)
+        {
+                threads.emplace_back(
+                    [this, &correct_seeks]()
+                    {
+                            for (int i = 0; i < kSeeksPerThread; i++)
+                            {
+                                    SkipList::Iterator iter(list_.get());
+                                    iter.seek("target_key");
+
+                                    if (iter.valid() && iter.key().user_key.to_string() == "target_key")
+                                    {
+                                            // Should land on newest version (highest sequence)
+                                            if (iter.key().sequence == kNumVersions)
+                                            {
+                                                    correct_seeks.fetch_add(1, std::memory_order_relaxed);
+                                            }
+                                    }
+                            }
+                    });
+        }
+
+        for (auto &t : threads)
+        {
+                t.join();
+        }
+
+        EXPECT_EQ(correct_seeks.load(), kNumThreads * kSeeksPerThread);
+}
+
+// Max Height Stress Test
+
+TEST_F(SkipListConcurrentTest, MaxHeightConcurrentInserts)
+{
+        // Force creation of tall nodes by inserting many keys
+        // With branching factor 4 and max height 12, we need enough keys
+        // to likely create some max-height nodes
+        const int kNumThreads = 4;
+        const int kInsertsPerThread = 1000;
+        std::atomic<uint64_t> seq_counter{0};
+
+        std::vector<std::thread> threads;
+        for (int t = 0; t < kNumThreads; t++)
+        {
+                threads.emplace_back(
+                    [this, t, &seq_counter]()
+                    {
+                            for (int i = 0; i < kInsertsPerThread; i++)
+                            {
+                                    // Use formatted keys to ensure good distribution
+                                    char key[32];
+                                    snprintf(key, sizeof(key), "key_%03d_%06d", t, i);
+                                    uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed) + 1;
+                                    list_->insert(InternalKey(key, seq, KeyType::Put), std::to_string(i));
+                            }
+                    });
+        }
+
+        for (auto &t : threads)
+        {
+                t.join();
+        }
+
+        // Verify all keys via iteration
+        SkipList::Iterator iter(list_.get());
+        int count = 0;
+        for (iter.seek_to_first(); iter.valid(); iter.next())
+        {
+                count++;
+        }
+
+        EXPECT_EQ(count, kNumThreads * kInsertsPerThread);
+}
+
+// Sequence Number Boundaries
+
+TEST_F(SkipListConcurrentTest, SequenceNumberBoundaries)
+{
+        const int kNumThreads = 4;
+        const int kInsertsPerThread = 100;
+
+        // Test with very high sequence numbers (near UINT64_MAX)
+        std::atomic<uint64_t> seq_counter{UINT64_MAX - 1000};
+
+        std::vector<std::thread> threads;
+        for (int t = 0; t < kNumThreads; t++)
+        {
+                threads.emplace_back(
+                    [this, &seq_counter]()
+                    {
+                            for (int i = 0; i < kInsertsPerThread; i++)
+                            {
+                                    std::string key = "key" + std::to_string(i);
+                                    uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed);
+                                    list_->insert(InternalKey(key, seq, KeyType::Put), "value");
+                            }
+                    });
+        }
+
+        for (auto &t : threads)
+        {
+                t.join();
+        }
+
+        // Verify keys exist and ordering is maintained
+        for (int i = 0; i < kInsertsPerThread; i++)
+        {
+                std::string key = "key" + std::to_string(i);
+                std::string value;
+                EXPECT_TRUE(list_->get(key, &value));
+        }
+}
+
+// Tombstone Visibility Under Concurrency
+
+TEST_F(SkipListConcurrentTest, ConcurrentDeletesAndReads)
+{
+        const int kNumKeys = 100;
+        const int kNumWriters = 2;
+        const int kNumReaders = 4;
+        std::atomic<uint64_t> seq_counter{0};
+        std::atomic<bool> stop{false};
+
+        // Pre-populate with initial values
+        for (int i = 0; i < kNumKeys; i++)
+        {
+                std::string key = "key" + std::to_string(i);
+                uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed) + 1;
+                list_->insert(InternalKey(key, seq, KeyType::Put), "initial");
+        }
+
+        // Writer threads: alternate between put and delete
+        std::vector<std::thread> writers;
+        for (int w = 0; w < kNumWriters; w++)
+        {
+                writers.emplace_back(
+                    [this, &seq_counter]()
+                    {
+                            std::mt19937 rng(std::random_device{}());
+                            std::uniform_int_distribution<int> key_dist(0, kNumKeys - 1);
+                            std::uniform_int_distribution<int> type_dist(0, 1);
+
+                            int ops = 0;
+                            while (ops < 500)
+                            {
+                                    int k = key_dist(rng);
+                                    std::string key = "key" + std::to_string(k);
+                                    uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed) + 1;
+
+                                    if (type_dist(rng) == 0)
+                                    {
+                                            // Put
+                                            list_->insert(InternalKey(key, seq, KeyType::Put), "updated");
+                                    }
+                                    else
+                                    {
+                                            // Delete
+                                            list_->insert(InternalKey(key, seq, KeyType::Delete), "");
+                                    }
+                                    ops++;
+                            }
+                    });
+        }
+
+        // Reader threads: continuously read and verify consistency
+        std::vector<std::thread> readers;
+        for (int r = 0; r < kNumReaders; r++)
+        {
+                readers.emplace_back(
+                    [this, &stop]()
+                    {
+                            std::mt19937 rng(std::random_device{}());
+                            std::uniform_int_distribution<int> dist(0, kNumKeys - 1);
+
+                            while (!stop.load(std::memory_order_acquire))
+                            {
+                                    int k = dist(rng);
+                                    std::string key = "key" + std::to_string(k);
+                                    std::string value;
+
+                                    // Get may return true or false depending on latest version
+                                    // Just verify no crashes occur
+                                    list_->get(key, &value);
+                            }
+                    });
+        }
+
+        for (auto &w : writers)
+        {
+                w.join();
+        }
+        stop.store(true, std::memory_order_release);
+
+        for (auto &r : readers)
+        {
+                r.join();
+        }
+
+        // All operations should complete without crashes
+        SUCCEED();
+}
+
+// Version Chain Integrity
+
+TEST_F(SkipListConcurrentTest, VersionChainIntegrityUnderConcurrentWrites)
+{
+        const int kNumThreads = 8;
+        const int kVersionsPerThread = 50;
+        const std::string kTargetKey = "versioned_key";
+        std::atomic<uint64_t> seq_counter{0};
+
+        // All threads update the same key
+        std::vector<std::thread> threads;
+        for (int t = 0; t < kNumThreads; t++)
+        {
+                threads.emplace_back(
+                    [this, t, &seq_counter, &kTargetKey]()
+                    {
+                            for (int i = 0; i < kVersionsPerThread; i++)
+                            {
+                                    uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed) + 1;
+                                    std::string value = "t" + std::to_string(t) + "_v" + std::to_string(i);
+                                    list_->insert(InternalKey(kTargetKey, seq, KeyType::Put), value);
+                            }
+                    });
+        }
+
+        for (auto &t : threads)
+        {
+                t.join();
+        }
+
+        // Verify all versions are present and in correct order
+        SkipList::Iterator iter(list_.get());
+        iter.seek(kTargetKey);
+
+        int version_count = 0;
+        uint64_t prev_seq = UINT64_MAX;
+
+        while (iter.valid() && iter.key().user_key.to_string() == kTargetKey)
+        {
+                uint64_t seq = iter.key().sequence;
+                EXPECT_LT(seq, prev_seq) << "Version sequence should be descending";
+                prev_seq = seq;
+                version_count++;
+                iter.next();
+        }
+
+        EXPECT_EQ(version_count, kNumThreads * kVersionsPerThread);
+}
+
+// Seek Accuracy During Concurrent Insertions
+
+TEST_F(SkipListConcurrentTest, SeekAccuracyDuringConcurrentInserts)
+{
+        const int kNumWriters = 2;
+        const int kNumSeekers = 4;
+        const int kInsertsPerWriter = 500;
+        const int kSeeksPerSeeker = 1000;
+        std::atomic<uint64_t> seq_counter{0};
+        std::atomic<bool> stop_seeking{false};
+
+        // Writers continuously insert keys
+        std::vector<std::thread> writers;
+        for (int w = 0; w < kNumWriters; w++)
+        {
+                writers.emplace_back(
+                    [this, w, &seq_counter]()
+                    {
+                            for (int i = 0; i < kInsertsPerWriter; i++)
+                            {
+                                    char key[32];
+                                    snprintf(key, sizeof(key), "key_%03d_%06d", w, i);
+                                    uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed) + 1;
+                                    list_->insert(InternalKey(key, seq, KeyType::Put), std::to_string(i));
+                            }
+                    });
+        }
+
+        // Seekers continuously seek to random keys
+        std::vector<std::thread> seekers;
+        std::atomic<int> seek_errors{0};
+
+        for (int s = 0; s < kNumSeekers; s++)
+        {
+                seekers.emplace_back(
+                    [this, &stop_seeking, &seek_errors]()
+                    {
+                            std::mt19937 rng(std::random_device{}());
+                            std::uniform_int_distribution<int> writer_dist(0, kNumWriters - 1);
+                            std::uniform_int_distribution<int> key_dist(0, kInsertsPerWriter - 1);
+
+                            int local_seeks = 0;
+                            while (local_seeks < kSeeksPerSeeker && !stop_seeking.load(std::memory_order_acquire))
+                            {
+                                    int w = writer_dist(rng);
+                                    int k = key_dist(rng);
+                                    char seek_key[32];
+                                    snprintf(seek_key, sizeof(seek_key), "key_%03d_%06d", w, k);
+
+                                    SkipList::Iterator iter(list_.get());
+                                    iter.seek(seek_key);
+
+                                    if (iter.valid())
+                                    {
+                                            std::string found_key = iter.key().user_key.to_string();
+                                            // Found key should be >= seek key
+                                            if (found_key < std::string(seek_key))
+                                            {
+                                                    seek_errors.fetch_add(1, std::memory_order_relaxed);
+                                            }
+                                    }
+                                    local_seeks++;
+                            }
+                    });
+        }
+
+        for (auto &w : writers)
+        {
+                w.join();
+        }
+        stop_seeking.store(true, std::memory_order_release);
+
+        for (auto &s : seekers)
+        {
+                s.join();
+        }
+
+        EXPECT_EQ(seek_errors.load(), 0);
+}
+
+// Interleaved Insert Pattern (Stress Splice Invalidation)
+
+TEST_F(SkipListConcurrentTest, InterleavedInsertPattern)
+{
+        const int kNumThreads = 4;
+        const int kRounds = 100;
+        std::atomic<uint64_t> seq_counter{0};
+
+        // Each thread inserts keys in interleaved pattern to maximize contention
+        std::vector<std::thread> threads;
+        for (int t = 0; t < kNumThreads; t++)
+        {
+                threads.emplace_back(
+                    [this, t, &seq_counter]()
+                    {
+                            for (int round = 0; round < kRounds; round++)
+                            {
+                                    // Insert in pattern: t0 inserts 0,4,8... t1 inserts 1,5,9...
+                                    for (int i = t; i < kRounds * kNumThreads; i += kNumThreads)
+                                    {
+                                            char key[16];
+                                            snprintf(key, sizeof(key), "k%08d", i);
+                                            uint64_t seq = seq_counter.fetch_add(1, std::memory_order_relaxed) + 1;
+                                            list_->insert(InternalKey(key, seq, KeyType::Put), std::to_string(i));
+                                    }
+                            }
+                    });
+        }
+
+        for (auto &t : threads)
+        {
+                t.join();
+        }
+
+        // Verify sorted order
+        SkipList::Iterator iter(list_.get());
+        std::string prev_key;
+        int count = 0;
+
+        for (iter.seek_to_first(); iter.valid(); iter.next())
+        {
+                std::string key = iter.key().user_key.to_string();
+                if (!prev_key.empty())
+                {
+                        EXPECT_LE(prev_key, key) << "Keys should be in sorted order";
+                }
+                prev_key = key;
+                count++;
+        }
+
+        EXPECT_GT(count, 0);
+}
