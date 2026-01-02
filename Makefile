@@ -19,7 +19,7 @@ else ifeq ($(ARCH),x86_64)
     CPU_FLAGS += -march=native
 endif
 
-CXXFLAGS = -std=c++17 -Wall -Wextra -g -fno-omit-frame-pointer -pthread $(CPU_FLAGS)
+CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -g -fno-omit-frame-pointer -pthread $(CPU_FLAGS)
 CXXFLAGS_BENCH = -std=c++17 -Wall -Wextra -O3 -DNDEBUG -pthread
 LDFLAGS = -pthread
 

@@ -1,0 +1,35 @@
+2026-01-02 17:22:35.872 [INFO] SkipList Multi-threaded Stress Test V1
+2026-01-02 17:22:35.872 [INFO] ====================================
+2026-01-02 17:22:35.872 [INFO] Keys to insert: 100000000
+2026-01-02 17:22:35.872 [INFO] Threads: 12
+2026-01-02 17:22:35.872 [INFO] Key size: 16 bytes
+2026-01-02 17:22:35.872 [INFO] Value size: 100 bytes
+2026-01-02 17:22:35.872 [INFO] 
+2026-01-02 17:22:35.872 [INFO] Inserting keys...
+2026-01-02 17:22:36.873 [INFO]   9M keys, 9132K ops/sec, memory: 1625 MB
+2026-01-02 17:22:37.873 [INFO]   18M keys, 9165K ops/sec, memory: 3255 MB
+2026-01-02 17:22:38.873 [INFO]   27M keys, 9161K ops/sec, memory: 4884 MB
+2026-01-02 17:22:39.873 [INFO]   37M keys, 9160K ops/sec, memory: 6513 MB
+2026-01-02 17:22:40.873 [INFO]   46M keys, 9136K ops/sec, memory: 8138 MB
+2026-01-02 17:22:41.873 [INFO]   55M keys, 9146K ops/sec, memory: 9765 MB
+2026-01-02 17:22:42.874 [INFO]   64M keys, 9132K ops/sec, memory: 11389 MB
+2026-01-02 17:22:43.874 [INFO]   73M keys, 9110K ops/sec, memory: 13009 MB
+2026-01-02 17:22:44.874 [INFO]   82M keys, 9143K ops/sec, memory: 14635 MB
+2026-01-02 17:22:45.874 [INFO]   91M keys, 8388K ops/sec, memory: 16127 MB
+2026-01-02 17:22:46.874 [INFO]   96M keys, 4825K ops/sec, memory: 16985 MB
+2026-01-02 17:22:47.874 [INFO]   100M keys, 4458K ops/sec, memory: 17778 MB
+2026-01-02 17:22:48.875 [INFO]   100M keys, 30K ops/sec, memory: 17784 MB
+2026-01-02 17:22:48.875 [INFO] 
+2026-01-02 17:22:48.875 [INFO] === Results ===
+2026-01-02 17:22:48.875 [INFO] Total keys inserted: 100000000
+2026-01-02 17:22:48.875 [INFO] Threads: 12
+2026-01-02 17:22:48.875 [INFO] Total time: 12.02 seconds
+2026-01-02 17:22:48.875 [INFO] Throughput: 8322667 inserts/sec
+2026-01-02 17:22:48.875 [INFO] Throughput: 8.32 M inserts/sec
+2026-01-02 17:22:48.875 [INFO] Arena memory: 17783.75 MB
+2026-01-02 17:22:48.875 [INFO] Bytes per entry: 186.476
+2026-01-02 17:22:48.875 [INFO] 
+2026-01-02 17:22:48.875 [INFO] === Verification ===
+2026-01-02 17:22:48.875 [INFO] Key 0: found (value size=100)
+2026-01-02 17:22:48.875 [INFO] Key 50000000: found (value size=100)
+2026-01-02 17:22:48.875 [INFO] Key 99999999: found (value size=100)
