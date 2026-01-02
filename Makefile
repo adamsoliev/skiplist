@@ -1,5 +1,25 @@
 CXX = clang++
-CXXFLAGS = -std=c++17 -Wall -Wextra -g -pthread
+
+# Detect CPU architecture and set appropriate flags
+ARCH := $(shell uname -m)
+CPU_FLAGS :=
+
+ifeq ($(ARCH),aarch64)
+    # Check if running on ARM64/AArch64
+    CPU_MODEL := $(shell lscpu | grep -i "model name" | head -1)
+    ifneq ($(findstring Neoverse,$(CPU_MODEL)),)
+        # Neoverse-specific optimizations
+        CPU_FLAGS += -mcpu=neoverse-512tvb -moutline-atomics
+    else
+        # Generic ARM64 optimizations
+        CPU_FLAGS += -march=armv8-a
+    endif
+else ifeq ($(ARCH),x86_64)
+    # x86_64 optimizations - use native for local builds
+    CPU_FLAGS += -march=native
+endif
+
+CXXFLAGS = -std=c++17 -Wall -Wextra -O3 -g -fno-omit-frame-pointer -pthread $(CPU_FLAGS)
 CXXFLAGS_BENCH = -std=c++17 -Wall -Wextra -O3 -DNDEBUG -pthread
 LDFLAGS = -pthread
 
@@ -26,29 +46,44 @@ TEST_TARGET = run_tests
 
 # Benchmark configuration
 BENCH_DIR = bench
-BENCH_SOURCES = $(wildcard $(BENCH_DIR)/*.cpp)
+BENCH_SOURCES = $(BENCH_DIR)/skiplist_bench.cpp
 BENCH_OBJECTS = $(BENCH_SOURCES:.cpp=.o)
 BENCH_TARGET = run_bench
 
-# Number of parallel test jobs (default to number of CPU cores)
-NPROCS := $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+# Comparative benchmark configuration
+COMP_BENCH_SOURCES = $(BENCH_DIR)/comparative_bench.cpp
+COMP_BENCH_OBJECTS = $(COMP_BENCH_SOURCES:.cpp=.o)
+COMP_BENCH_TARGET = run_comp_bench
+REDIS_SKIPLIST_OBJ = third_party/redis/zskiplist.o
+
+# Profiling configuration
+PERF = /usr/lib/linux-tools-6.8.0-31/perf
+PERF_FREQ = 99
+FLAMEGRAPH_DIR = /home/ubuntu/development/FlameGraph
+APERF_DIR = /tmp/aperf-v0.1.10-alpha-aarch64
+PROFILE_NAME ?= skiplist_profile
+REPORT_NAME ?= skiplist_report
+
+# Number of parallel jobs
+NPROCS := $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 
 # Sanitizer flags
-SANITIZER_COMMON = -fno-omit-frame-pointer
-ASAN_FLAGS = -fsanitize=address $(SANITIZER_COMMON)
-TSAN_FLAGS = -fsanitize=thread $(SANITIZER_COMMON)
-UBSAN_FLAGS = -fsanitize=undefined $(SANITIZER_COMMON)
-MSAN_FLAGS = -fsanitize=memory $(SANITIZER_COMMON)
+ASAN_FLAGS = -fsanitize=address -fno-omit-frame-pointer
+TSAN_FLAGS = -fsanitize=thread -fno-omit-frame-pointer
+UBSAN_FLAGS = -fsanitize=undefined -fno-omit-frame-pointer
 
-.PHONY: all clean check test gtest gbench bench format format-check lint compile_commands
-.PHONY: check-asan check-tsan check-ubsan check-msan check-valgrind check-all-sanitizers
+.PHONY: all clean test bench comp-bench sanitizers valgrind
+.PHONY: format format-check lint compile_commands
+.PHONY: perf-record perf-report perf-stat perf-annotate flamegraph aperf-record aperf-report
+.PHONY: help
 
 all: $(TARGET)
 
 $(TARGET): $(SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-# Download and build Google Test
+# === Dependencies (auto-downloaded) ===
+
 $(GTEST_DIR):
 	@echo "Downloading Google Test..."
 	@mkdir -p third_party
@@ -63,9 +98,6 @@ $(GTEST_BUILD_DIR)/lib/libgtest.a: $(GTEST_DIR)
 		cmake .. -DCMAKE_CXX_STANDARD=17 -DBUILD_GMOCK=OFF > /dev/null && \
 		make -j$(NPROCS) > /dev/null
 
-gtest: $(GTEST_BUILD_DIR)/lib/libgtest.a
-
-# Download and build Google Benchmark
 $(GBENCH_DIR):
 	@echo "Downloading Google Benchmark..."
 	@mkdir -p third_party
@@ -81,133 +113,153 @@ $(GBENCH_BUILD_DIR)/src/libbenchmark.a: $(GBENCH_DIR)
 			-DBENCHMARK_ENABLE_TESTING=OFF -DBENCHMARK_ENABLE_GTEST_TESTS=OFF > /dev/null && \
 		make -j$(NPROCS) > /dev/null
 
-gbench: $(GBENCH_BUILD_DIR)/src/libbenchmark.a
+# === Testing ===
 
-# Compile test object files
 $(TEST_DIR)/%.o: $(TEST_DIR)/%.cpp $(GTEST_BUILD_DIR)/lib/libgtest.a
 	$(CXX) $(CXXFLAGS) -I$(GTEST_INCLUDE) -c $< -o $@
 
-# Link test executable
 $(TEST_TARGET): $(TEST_OBJECTS) $(GTEST_BUILD_DIR)/lib/libgtest.a
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(TEST_OBJECTS) \
 		-L$(GTEST_LIB) -lgtest -lgtest_main
 
-# Run tests with parallel execution
-check: $(TEST_TARGET)
-	@echo "Running tests with $(NPROCS) parallel jobs..."
+test: $(TEST_TARGET)
 	@./$(TEST_TARGET) --gtest_color=yes
 
-# Alias for check
-test: check
+# === Sanitizers (ASan + TSan + UBSan) ===
 
-# Sanitizer test targets (rebuild with sanitizer flags)
-check-asan: $(GTEST_BUILD_DIR)/lib/libgtest.a
-	@echo "Building and running tests with AddressSanitizer..."
+sanitizers: $(GTEST_BUILD_DIR)/lib/libgtest.a
+	@echo "=== AddressSanitizer ==="
 	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
-	@$(MAKE) CXXFLAGS="$(CXXFLAGS) $(ASAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(ASAN_FLAGS)" $(TEST_TARGET)
+	@$(MAKE) --no-print-directory CXXFLAGS="$(CXXFLAGS) $(ASAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(ASAN_FLAGS)" $(TEST_TARGET)
 	@ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 ./$(TEST_TARGET) --gtest_color=yes
 	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
-
-check-tsan: $(GTEST_BUILD_DIR)/lib/libgtest.a
-	@echo "Building and running tests with ThreadSanitizer..."
+	@echo ""
+	@echo "=== ThreadSanitizer ==="
 	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
-	@$(MAKE) CXXFLAGS="$(CXXFLAGS) $(TSAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(TSAN_FLAGS)" $(TEST_TARGET)
+	@$(MAKE) --no-print-directory CXXFLAGS="$(CXXFLAGS) $(TSAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(TSAN_FLAGS)" $(TEST_TARGET)
 	@TSAN_OPTIONS=second_deadlock_stack=1:abort_on_error=1 ./$(TEST_TARGET) --gtest_color=yes
 	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
-
-check-ubsan: $(GTEST_BUILD_DIR)/lib/libgtest.a
-	@echo "Building and running tests with UndefinedBehaviorSanitizer..."
+	@echo ""
+	@echo "=== UndefinedBehaviorSanitizer ==="
 	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
-	@$(MAKE) CXXFLAGS="$(CXXFLAGS) $(UBSAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(UBSAN_FLAGS)" $(TEST_TARGET)
+	@$(MAKE) --no-print-directory CXXFLAGS="$(CXXFLAGS) $(UBSAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(UBSAN_FLAGS)" $(TEST_TARGET)
 	@UBSAN_OPTIONS=print_stacktrace=1:abort_on_error=1 ./$(TEST_TARGET) --gtest_color=yes
 	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
-
-check-msan: $(GTEST_BUILD_DIR)/lib/libgtest.a
-	@echo "Building and running tests with MemorySanitizer..."
-	@echo "Note: MSan requires all dependencies (including libc++) to be built with MSan"
-	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
-	@$(MAKE) CXXFLAGS="$(CXXFLAGS) $(MSAN_FLAGS)" LDFLAGS="$(LDFLAGS) $(MSAN_FLAGS)" $(TEST_TARGET)
-	@MSAN_OPTIONS=abort_on_error=1 ./$(TEST_TARGET) --gtest_color=yes
-	@rm -f $(TEST_OBJECTS) $(TEST_TARGET)
-
-# Run all sanitizers sequentially
-check-all-sanitizers: check-asan check-tsan check-ubsan
+	@echo ""
 	@echo "All sanitizer tests passed!"
 
-# Valgrind memory check
-check-valgrind: $(TEST_TARGET)
-	@echo "Running tests with Valgrind..."
+valgrind: $(TEST_TARGET)
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
 		--error-exitcode=1 ./$(TEST_TARGET) --gtest_color=no
 
-# Compile benchmark object files
+# === Benchmarks ===
+
 $(BENCH_DIR)/%.o: $(BENCH_DIR)/%.cpp $(GBENCH_BUILD_DIR)/src/libbenchmark.a
 	$(CXX) $(CXXFLAGS_BENCH) -I$(GBENCH_INCLUDE) -c $< -o $@
 
-# Link benchmark executable
 $(BENCH_TARGET): $(BENCH_OBJECTS) $(GBENCH_BUILD_DIR)/src/libbenchmark.a
 	$(CXX) $(CXXFLAGS_BENCH) $(LDFLAGS) -o $@ $(BENCH_OBJECTS) \
 		-L$(GBENCH_LIB) -lbenchmark -lbenchmark_main
 
-# Run benchmarks
 bench: $(BENCH_TARGET)
-	@echo "Running benchmarks..."
-	@./$(BENCH_TARGET) --benchmark_color=true
+	@./$(BENCH_TARGET) --benchmark_color=true --benchmark_format=json --benchmark_out=benchmark_results.json
 
-# Run benchmarks with JSON output for CI
-bench-ci: $(BENCH_TARGET)
-	@./$(BENCH_TARGET) --benchmark_format=json --benchmark_out=benchmark_results.json
+# === Comparative Benchmark ===
 
-clean:
-	rm -f $(TARGET) $(TEST_TARGET) $(TEST_OBJECTS) $(BENCH_TARGET) $(BENCH_OBJECTS) benchmark_results.json
+# Compile Redis zskiplist C code
+$(REDIS_SKIPLIST_OBJ): third_party/redis/zskiplist.c third_party/redis/zskiplist.h
+	$(CC) -c -O3 -std=c11 -I third_party/redis -o $@ $<
 
-# Deep clean including Google Test and Benchmark
-distclean: clean
-	rm -rf $(GTEST_DIR) $(GTEST_BUILD_DIR) $(GBENCH_DIR) $(GBENCH_BUILD_DIR)
+# Compile comparative benchmark
+$(BENCH_DIR)/comparative_bench.o: $(BENCH_DIR)/comparative_bench.cpp $(GBENCH_BUILD_DIR)/src/libbenchmark.a
+	$(CXX) $(CXXFLAGS_BENCH) -I$(GBENCH_INCLUDE) -c $< -o $@
 
-# Format source files
+# Link comparative benchmark
+$(COMP_BENCH_TARGET): $(COMP_BENCH_OBJECTS) $(REDIS_SKIPLIST_OBJ) $(GBENCH_BUILD_DIR)/src/libbenchmark.a
+	$(CXX) $(CXXFLAGS_BENCH) $(LDFLAGS) -o $@ $(COMP_BENCH_OBJECTS) $(REDIS_SKIPLIST_OBJ) \
+		-L$(GBENCH_LIB) -lbenchmark -lbenchmark_main
+
+comp-bench: $(COMP_BENCH_TARGET)
+	@./$(COMP_BENCH_TARGET) --benchmark_color=true --benchmark_format=json --benchmark_out=comp_benchmark_results.json
+
+# === Profiling ===
+
+perf-record: $(TARGET)
+	@echo "Recording perf profile at $(PERF_FREQ) Hz..."
+	sudo $(PERF) record -g -F $(PERF_FREQ) ./$(TARGET)
+
+perf-report:
+	sudo $(PERF) report -g 'graph,0.5,caller'
+
+perf-stat: $(TARGET)
+	sudo $(PERF) stat -e cycles,instructions,stalled-cycles-frontend,stalled-cycles-backend,cache-misses,branch-misses ./$(TARGET)
+
+perf-annotate:
+	sudo $(PERF) annotate --stdio
+
+flamegraph:
+	@test -d $(FLAMEGRAPH_DIR) || (echo "Error: FlameGraph not found at $(FLAMEGRAPH_DIR)" && exit 1)
+	sudo $(PERF) script | $(FLAMEGRAPH_DIR)/stackcollapse-perf.pl | $(FLAMEGRAPH_DIR)/flamegraph.pl > flamegraph.svg
+	@echo "Generated flamegraph.svg"
+
+aperf-record: $(TARGET)
+	@test -x $(APERF_DIR)/aperf || (echo "Error: aperf not found at $(APERF_DIR)" && exit 1)
+	sudo $(APERF_DIR)/aperf record -r $(PROFILE_NAME) -i 1 -p 180 --profile
+
+aperf-report:
+	sudo $(APERF_DIR)/aperf report -r $(PROFILE_NAME) -n $(REPORT_NAME)
+	@echo "Report generated in $(REPORT_NAME)/"
+
+# === Code Quality ===
+
 format:
-	@find src tests \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) | xargs clang-format -i
+	@find src tests bench \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) | xargs clang-format -i
 
-# Check formatting without modifying files
 format-check:
-	@find src tests \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) | xargs clang-format --dry-run --Werror
+	@find src tests bench \( -name '*.cpp' -o -name '*.hpp' -o -name '*.h' \) | xargs clang-format --dry-run --Werror
 
-# Run clang-tidy linter
 lint:
 	@find src \( -name '*.cpp' -o -name '*.hpp' \) | xargs -I {} clang-tidy {} -- -std=c++17
 
-# Generate compile_commands.json for clangd (requires bear)
 compile_commands: clean
 	bear -- $(MAKE) all $(TEST_TARGET)
 
-# Show help
+# === Cleanup ===
+
+clean:
+	rm -f $(TARGET) $(TEST_TARGET) $(TEST_OBJECTS) $(BENCH_TARGET) $(BENCH_OBJECTS) benchmark_results.json
+	rm -f $(COMP_BENCH_TARGET) $(COMP_BENCH_OBJECTS) $(REDIS_SKIPLIST_OBJ) comp_benchmark_results.json
+
+distclean: clean
+	rm -rf third_party
+
+# === Help ===
+
 help:
-	@echo "Available targets:"
-	@echo "  all                  - Build main executable (default)"
-	@echo "  check                - Build and run all tests"
-	@echo "  test                 - Alias for check"
+	@echo "Usage: make <target>"
 	@echo ""
-	@echo "Sanitizer targets:"
-	@echo "  check-asan           - Run tests with AddressSanitizer"
-	@echo "  check-tsan           - Run tests with ThreadSanitizer"
-	@echo "  check-ubsan          - Run tests with UndefinedBehaviorSanitizer"
-	@echo "  check-msan           - Run tests with MemorySanitizer (requires MSan-built deps)"
-	@echo "  check-all-sanitizers - Run ASan, TSan, and UBSan sequentially"
-	@echo "  check-valgrind       - Run tests with Valgrind memory checker"
+	@echo "Build:"
+	@echo "  all          Build main executable (default)"
+	@echo "  clean        Remove build artifacts"
+	@echo "  distclean    Remove everything including dependencies"
 	@echo ""
-	@echo "Build and benchmark:"
-	@echo "  gtest                - Download and build Google Test only"
-	@echo "  gbench               - Download and build Google Benchmark only"
-	@echo "  bench                - Build and run benchmarks"
-	@echo "  bench-ci             - Run benchmarks with JSON output"
+	@echo "Test:"
+	@echo "  test         Run all tests"
+	@echo "  sanitizers   Run tests with ASan, TSan, UBSan"
+	@echo "  valgrind     Run tests with Valgrind"
+	@echo "  bench        Run benchmarks (outputs JSON)"
+	@echo "  comp-bench   Run comparative benchmark (minilsm vs RocksDB vs Redis)"
+	@echo ""
+	@echo "Profile (requires sudo):"
+	@echo "  perf-stat    Show CPU counters (cycles, stalls, cache/branch misses)"
+	@echo "  perf-record  Record perf profile"
+	@echo "  perf-report  Show interactive perf report"
+	@echo "  perf-annotate Show annotated assembly from perf.data"
+	@echo "  flamegraph   Generate flamegraph.svg"
+	@echo "  aperf-record Record aperf profile (PROFILE_NAME=name)"
+	@echo "  aperf-report Generate aperf report (REPORT_NAME=name)"
 	@echo ""
 	@echo "Code quality:"
-	@echo "  format               - Format source files with clang-format"
-	@echo "  format-check         - Check formatting without modifying files"
-	@echo "  lint                 - Run clang-tidy linter"
-	@echo "  compile_commands     - Generate compile_commands.json for clangd"
-	@echo ""
-	@echo "Cleanup:"
-	@echo "  clean                - Remove build artifacts"
-	@echo "  distclean            - Remove build artifacts, Google Test and Benchmark"
+	@echo "  format       Format source files"
+	@echo "  format-check Check formatting"
+	@echo "  lint         Run clang-tidy"

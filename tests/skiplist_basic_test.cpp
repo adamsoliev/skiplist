@@ -286,9 +286,14 @@ TEST_F(SkipListBasicTest, ArenaMemoryGrowsWithInserts)
         size_t after_one = arena_->memory_usage();
         EXPECT_GE(after_one, initial_usage);
 
-        for (int i = 0; i < 100; i++)
+        // Insert enough large values to exceed a single 128KB chunk
+        // Each insert uses roughly: key (10) + value (1000) + node overhead (~100)
+        // So ~1100 bytes per insert. 128KB / 1100 ≈ 119 inserts per chunk.
+        // Insert 200+ entries to guarantee multiple chunks.
+        std::string large_value(1000, 'x');
+        for (int i = 0; i < 250; i++)
         {
-                insert("key" + std::to_string(i), i + 2, "value" + std::to_string(i));
+                insert("key" + std::to_string(i), i + 2, large_value);
         }
         size_t after_many = arena_->memory_usage();
         EXPECT_GT(after_many, after_one);
