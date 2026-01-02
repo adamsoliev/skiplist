@@ -1,5 +1,25 @@
 CXX = clang++
-CXXFLAGS = -std=c++17 -Wall -Wextra -g -fno-omit-frame-pointer -pthread
+
+# Detect CPU architecture and set appropriate flags
+ARCH := $(shell uname -m)
+CPU_FLAGS :=
+
+ifeq ($(ARCH),aarch64)
+    # Check if running on ARM64/AArch64
+    CPU_MODEL := $(shell lscpu | grep -i "model name" | head -1)
+    ifneq ($(findstring Neoverse,$(CPU_MODEL)),)
+        # Neoverse-specific optimizations
+        CPU_FLAGS += -mcpu=neoverse-512tvb -moutline-atomics
+    else
+        # Generic ARM64 optimizations
+        CPU_FLAGS += -march=armv8-a
+    endif
+else ifeq ($(ARCH),x86_64)
+    # x86_64 optimizations - use native for local builds
+    CPU_FLAGS += -march=native
+endif
+
+CXXFLAGS = -std=c++17 -Wall -Wextra -g -fno-omit-frame-pointer -pthread $(CPU_FLAGS)
 CXXFLAGS_BENCH = -std=c++17 -Wall -Wextra -O3 -DNDEBUG -pthread
 LDFLAGS = -pthread
 
