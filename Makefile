@@ -68,7 +68,7 @@ UBSAN_FLAGS = -fsanitize=undefined -fno-omit-frame-pointer
 
 .PHONY: all clean test bench sanitizers valgrind
 .PHONY: format format-check lint compile_commands
-.PHONY: perf-record perf-report flamegraph aperf-record aperf-report
+.PHONY: perf-record perf-report perf-stat perf-annotate flamegraph aperf-record aperf-report
 .PHONY: help
 
 all: $(TARGET)
@@ -167,6 +167,12 @@ perf-record: $(TARGET)
 perf-report:
 	sudo $(PERF) report -g 'graph,0.5,caller'
 
+perf-stat: $(TARGET)
+	sudo $(PERF) stat -e cycles,instructions,stalled-cycles-frontend,stalled-cycles-backend,cache-misses,branch-misses ./$(TARGET)
+
+perf-annotate:
+	sudo $(PERF) annotate --stdio
+
 flamegraph:
 	@test -d $(FLAMEGRAPH_DIR) || (echo "Error: FlameGraph not found at $(FLAMEGRAPH_DIR)" && exit 1)
 	sudo $(PERF) script | $(FLAMEGRAPH_DIR)/stackcollapse-perf.pl | $(FLAMEGRAPH_DIR)/flamegraph.pl > flamegraph.svg
@@ -219,8 +225,10 @@ help:
 	@echo "  bench        Run benchmarks (outputs JSON)"
 	@echo ""
 	@echo "Profile (requires sudo):"
+	@echo "  perf-stat    Show CPU counters (cycles, stalls, cache/branch misses)"
 	@echo "  perf-record  Record perf profile"
 	@echo "  perf-report  Show interactive perf report"
+	@echo "  perf-annotate Show annotated assembly from perf.data"
 	@echo "  flamegraph   Generate flamegraph.svg"
 	@echo "  aperf-record Record aperf profile (PROFILE_NAME=name)"
 	@echo "  aperf-report Generate aperf report (REPORT_NAME=name)"
