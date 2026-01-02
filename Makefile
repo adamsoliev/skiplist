@@ -31,8 +31,9 @@ BENCH_OBJECTS = $(BENCH_SOURCES:.cpp=.o)
 BENCH_TARGET = run_bench
 
 # Profiling configuration
+PERF = /usr/lib/linux-tools-6.8.0-31/perf
 PERF_FREQ = 99
-FLAMEGRAPH_DIR = /tmp/FlameGraph
+FLAMEGRAPH_DIR = /home/ubuntu/development/FlameGraph
 APERF_DIR = /tmp/aperf-v0.1.10-alpha-aarch64
 PROFILE_NAME ?= skiplist_profile
 REPORT_NAME ?= skiplist_report
@@ -141,14 +142,14 @@ bench: $(BENCH_TARGET)
 
 perf-record: $(TARGET)
 	@echo "Recording perf profile at $(PERF_FREQ) Hz..."
-	sudo perf record -g -F $(PERF_FREQ) ./$(TARGET)
+	sudo $(PERF) record -g -F $(PERF_FREQ) ./$(TARGET)
 
 perf-report:
-	sudo perf report -g 'graph,0.5,caller'
+	sudo $(PERF) report -g 'graph,0.5,caller'
 
 flamegraph:
 	@test -d $(FLAMEGRAPH_DIR) || (echo "Error: FlameGraph not found at $(FLAMEGRAPH_DIR)" && exit 1)
-	sudo perf script | $(FLAMEGRAPH_DIR)/stackcollapse-perf.pl | $(FLAMEGRAPH_DIR)/flamegraph.pl > flamegraph.svg
+	sudo $(PERF) script | $(FLAMEGRAPH_DIR)/stackcollapse-perf.pl | $(FLAMEGRAPH_DIR)/flamegraph.pl > flamegraph.svg
 	@echo "Generated flamegraph.svg"
 
 aperf-record: $(TARGET)

@@ -1,0 +1,122 @@
+2026-01-02 03:05:00.033 [INFO] SkipList Multi-threaded Stress Test V1
+2026-01-02 03:05:00.033 [INFO] ====================================
+2026-01-02 03:05:00.033 [INFO] Keys to insert: 100000000
+2026-01-02 03:05:00.033 [INFO] Threads: 12
+2026-01-02 03:05:00.033 [INFO] Key size: 16 bytes
+2026-01-02 03:05:00.033 [INFO] Value size: 100 bytes
+2026-01-02 03:05:00.033 [INFO] 
+2026-01-02 03:05:00.033 [INFO] Inserting keys...
+2026-01-02 03:05:01.033 [INFO]   1M keys, 1001K ops/sec, memory: 178 MB
+2026-01-02 03:05:02.033 [INFO]   2M keys, 1008K ops/sec, memory: 356 MB
+2026-01-02 03:05:03.033 [INFO]   3M keys, 1014K ops/sec, memory: 536 MB
+2026-01-02 03:05:04.033 [INFO]   4M keys, 1005K ops/sec, memory: 714 MB
+2026-01-02 03:05:05.033 [INFO]   5M keys, 1007K ops/sec, memory: 892 MB
+2026-01-02 03:05:06.034 [INFO]   6M keys, 1006K ops/sec, memory: 1071 MB
+2026-01-02 03:05:07.034 [INFO]   7M keys, 1002K ops/sec, memory: 1248 MB
+2026-01-02 03:05:08.034 [INFO]   8M keys, 985K ops/sec, memory: 1423 MB
+2026-01-02 03:05:09.034 [INFO]   9M keys, 1004K ops/sec, memory: 1601 MB
+2026-01-02 03:05:10.034 [INFO]   10M keys, 1015K ops/sec, memory: 1781 MB
+2026-01-02 03:05:11.034 [INFO]   11M keys, 1011K ops/sec, memory: 1960 MB
+2026-01-02 03:05:12.034 [INFO]   12M keys, 1010K ops/sec, memory: 2139 MB
+2026-01-02 03:05:13.034 [INFO]   13M keys, 1010K ops/sec, memory: 2318 MB
+2026-01-02 03:05:14.035 [INFO]   14M keys, 1000K ops/sec, memory: 2495 MB
+2026-01-02 03:05:15.035 [INFO]   15M keys, 998K ops/sec, memory: 2672 MB
+2026-01-02 03:05:16.035 [INFO]   16M keys, 967K ops/sec, memory: 2843 MB
+2026-01-02 03:05:17.035 [INFO]   17M keys, 995K ops/sec, memory: 3020 MB
+2026-01-02 03:05:18.035 [INFO]   18M keys, 1004K ops/sec, memory: 3197 MB
+2026-01-02 03:05:19.035 [INFO]   19M keys, 998K ops/sec, memory: 3374 MB
+2026-01-02 03:05:20.035 [INFO]   20M keys, 998K ops/sec, memory: 3551 MB
+2026-01-02 03:05:21.035 [INFO]   21M keys, 994K ops/sec, memory: 3727 MB
+2026-01-02 03:05:22.036 [INFO]   22M keys, 1001K ops/sec, memory: 3905 MB
+2026-01-02 03:05:23.036 [INFO]   23M keys, 1000K ops/sec, memory: 4082 MB
+2026-01-02 03:05:24.036 [INFO]   24M keys, 992K ops/sec, memory: 4258 MB
+2026-01-02 03:05:25.036 [INFO]   25M keys, 998K ops/sec, memory: 4435 MB
+2026-01-02 03:05:26.036 [INFO]   26M keys, 1007K ops/sec, memory: 4613 MB
+2026-01-02 03:05:27.036 [INFO]   27M keys, 1012K ops/sec, memory: 4793 MB
+2026-01-02 03:05:28.036 [INFO]   28M keys, 1013K ops/sec, memory: 4972 MB
+2026-01-02 03:05:29.036 [INFO]   29M keys, 1015K ops/sec, memory: 5152 MB
+2026-01-02 03:05:30.037 [INFO]   30M keys, 1011K ops/sec, memory: 5331 MB
+2026-01-02 03:05:31.037 [INFO]   31M keys, 942K ops/sec, memory: 5498 MB
+2026-01-02 03:05:32.037 [INFO]   32M keys, 998K ops/sec, memory: 5675 MB
+2026-01-02 03:05:33.037 [INFO]   33M keys, 995K ops/sec, memory: 5851 MB
+2026-01-02 03:05:34.037 [INFO]   34M keys, 997K ops/sec, memory: 6028 MB
+2026-01-02 03:05:35.037 [INFO]   35M keys, 1010K ops/sec, memory: 6207 MB
+2026-01-02 03:05:36.037 [INFO]   36M keys, 1014K ops/sec, memory: 6387 MB
+2026-01-02 03:05:37.038 [INFO]   37M keys, 1014K ops/sec, memory: 6567 MB
+2026-01-02 03:05:38.038 [INFO]   38M keys, 1022K ops/sec, memory: 6748 MB
+2026-01-02 03:05:39.038 [INFO]   39M keys, 1000K ops/sec, memory: 6925 MB
+2026-01-02 03:05:40.038 [INFO]   40M keys, 1000K ops/sec, memory: 7102 MB
+2026-01-02 03:05:41.038 [INFO]   41M keys, 995K ops/sec, memory: 7279 MB
+2026-01-02 03:05:42.038 [INFO]   42M keys, 999K ops/sec, memory: 7456 MB
+2026-01-02 03:05:43.038 [INFO]   43M keys, 1008K ops/sec, memory: 7634 MB
+2026-01-02 03:05:44.038 [INFO]   44M keys, 1011K ops/sec, memory: 7814 MB
+2026-01-02 03:05:45.039 [INFO]   45M keys, 1018K ops/sec, memory: 7994 MB
+2026-01-02 03:05:46.039 [INFO]   46M keys, 1017K ops/sec, memory: 8174 MB
+2026-01-02 03:05:47.039 [INFO]   47M keys, 1006K ops/sec, memory: 8353 MB
+2026-01-02 03:05:48.039 [INFO]   48M keys, 1006K ops/sec, memory: 8531 MB
+2026-01-02 03:05:49.039 [INFO]   49M keys, 999K ops/sec, memory: 8708 MB
+2026-01-02 03:05:50.039 [INFO]   50M keys, 999K ops/sec, memory: 8885 MB
+2026-01-02 03:05:51.039 [INFO]   51M keys, 1002K ops/sec, memory: 9063 MB
+2026-01-02 03:05:52.039 [INFO]   52M keys, 1006K ops/sec, memory: 9241 MB
+2026-01-02 03:05:53.040 [INFO]   53M keys, 1014K ops/sec, memory: 9421 MB
+2026-01-02 03:05:54.040 [INFO]   54M keys, 1018K ops/sec, memory: 9601 MB
+2026-01-02 03:05:55.040 [INFO]   55M keys, 1015K ops/sec, memory: 9781 MB
+2026-01-02 03:05:56.040 [INFO]   56M keys, 999K ops/sec, memory: 9958 MB
+2026-01-02 03:05:57.040 [INFO]   57M keys, 1002K ops/sec, memory: 10136 MB
+2026-01-02 03:05:58.040 [INFO]   58M keys, 998K ops/sec, memory: 10313 MB
+2026-01-02 03:05:59.040 [INFO]   59M keys, 994K ops/sec, memory: 10489 MB
+2026-01-02 03:06:00.040 [INFO]   60M keys, 1013K ops/sec, memory: 10668 MB
+2026-01-02 03:06:01.041 [INFO]   61M keys, 1006K ops/sec, memory: 10846 MB
+2026-01-02 03:06:02.041 [INFO]   62M keys, 894K ops/sec, memory: 11005 MB
+2026-01-02 03:06:03.041 [INFO]   63M keys, 1013K ops/sec, memory: 11184 MB
+2026-01-02 03:06:04.041 [INFO]   64M keys, 1016K ops/sec, memory: 11364 MB
+2026-01-02 03:06:05.041 [INFO]   65M keys, 1019K ops/sec, memory: 11545 MB
+2026-01-02 03:06:06.041 [INFO]   66M keys, 1016K ops/sec, memory: 11725 MB
+2026-01-02 03:06:07.041 [INFO]   67M keys, 1017K ops/sec, memory: 11905 MB
+2026-01-02 03:06:08.041 [INFO]   68M keys, 1008K ops/sec, memory: 12084 MB
+2026-01-02 03:06:09.042 [INFO]   69M keys, 997K ops/sec, memory: 12261 MB
+2026-01-02 03:06:10.042 [INFO]   70M keys, 1008K ops/sec, memory: 12439 MB
+2026-01-02 03:06:11.042 [INFO]   71M keys, 998K ops/sec, memory: 12616 MB
+2026-01-02 03:06:12.042 [INFO]   72M keys, 1007K ops/sec, memory: 12795 MB
+2026-01-02 03:06:13.042 [INFO]   73M keys, 1017K ops/sec, memory: 12975 MB
+2026-01-02 03:06:14.042 [INFO]   74M keys, 1012K ops/sec, memory: 13154 MB
+2026-01-02 03:06:15.042 [INFO]   75M keys, 1019K ops/sec, memory: 13335 MB
+2026-01-02 03:06:16.042 [INFO]   76M keys, 1015K ops/sec, memory: 13515 MB
+2026-01-02 03:06:17.043 [INFO]   77M keys, 998K ops/sec, memory: 13692 MB
+2026-01-02 03:06:18.043 [INFO]   78M keys, 1002K ops/sec, memory: 13870 MB
+2026-01-02 03:06:19.043 [INFO]   79M keys, 1001K ops/sec, memory: 14047 MB
+2026-01-02 03:06:20.043 [INFO]   80M keys, 995K ops/sec, memory: 14223 MB
+2026-01-02 03:06:21.043 [INFO]   81M keys, 1018K ops/sec, memory: 14404 MB
+2026-01-02 03:06:22.043 [INFO]   82M keys, 1018K ops/sec, memory: 14584 MB
+2026-01-02 03:06:23.043 [INFO]   83M keys, 1012K ops/sec, memory: 14764 MB
+2026-01-02 03:06:24.043 [INFO]   84M keys, 1017K ops/sec, memory: 14944 MB
+2026-01-02 03:06:25.044 [INFO]   85M keys, 997K ops/sec, memory: 15120 MB
+2026-01-02 03:06:26.044 [INFO]   86M keys, 1002K ops/sec, memory: 15298 MB
+2026-01-02 03:06:27.044 [INFO]   87M keys, 1002K ops/sec, memory: 15476 MB
+2026-01-02 03:06:28.044 [INFO]   88M keys, 999K ops/sec, memory: 15653 MB
+2026-01-02 03:06:29.044 [INFO]   89M keys, 1009K ops/sec, memory: 15831 MB
+2026-01-02 03:06:30.044 [INFO]   90M keys, 1016K ops/sec, memory: 16012 MB
+2026-01-02 03:06:31.044 [INFO]   91M keys, 1016K ops/sec, memory: 16192 MB
+2026-01-02 03:06:32.044 [INFO]   92M keys, 1004K ops/sec, memory: 16370 MB
+2026-01-02 03:06:33.045 [INFO]   93M keys, 1006K ops/sec, memory: 16548 MB
+2026-01-02 03:06:34.045 [INFO]   94M keys, 997K ops/sec, memory: 16725 MB
+2026-01-02 03:06:35.045 [INFO]   95M keys, 997K ops/sec, memory: 16901 MB
+2026-01-02 03:06:36.045 [INFO]   96M keys, 1013K ops/sec, memory: 17081 MB
+2026-01-02 03:06:37.045 [INFO]   97M keys, 1009K ops/sec, memory: 17260 MB
+2026-01-02 03:06:38.045 [INFO]   98M keys, 991K ops/sec, memory: 17435 MB
+2026-01-02 03:06:39.045 [INFO]   99M keys, 964K ops/sec, memory: 17606 MB
+2026-01-02 03:06:40.045 [INFO]   100M keys, 654K ops/sec, memory: 17723 MB
+2026-01-02 03:06:40.045 [INFO] 
+2026-01-02 03:06:40.046 [INFO] === Results ===
+2026-01-02 03:06:40.046 [INFO] Total keys inserted: 100000000
+2026-01-02 03:06:40.046 [INFO] Threads: 12
+2026-01-02 03:06:40.046 [INFO] Total time: 99.76 seconds
+2026-01-02 03:06:40.046 [INFO] Throughput: 1002419 inserts/sec
+2026-01-02 03:06:40.046 [INFO] Throughput: 1.00 M inserts/sec
+2026-01-02 03:06:40.046 [INFO] Arena memory: 17722.71 MB
+2026-01-02 03:06:40.046 [INFO] Bytes per entry: 185.836
+2026-01-02 03:06:40.046 [INFO] 
+2026-01-02 03:06:40.046 [INFO] === Verification ===
+2026-01-02 03:06:40.046 [INFO] Key 0: found (value size=100)
+2026-01-02 03:06:40.046 [INFO] Key 50000000: found (value size=100)
+2026-01-02 03:06:40.046 [INFO] Key 99999999: found (value size=100)
