@@ -20,15 +20,6 @@ class SkipList
         static constexpr int kBranchingFactor = 4;
 
       private:
-        mutable std::atomic_flag insert_lock_ = ATOMIC_FLAG_INIT;
-
-        void lock_insert()
-        {
-                while (insert_lock_.test_and_set(std::memory_order_acquire))
-                        ;
-        }
-
-        void unlock_insert() { insert_lock_.clear(std::memory_order_release); }
 
         struct Node
         {
@@ -72,10 +63,10 @@ class SkipList
         SkipList &operator=(const SkipList &) = delete;
 
         // Insert key-value (allows duplicate user keys with different sequences)
-        // Uses spinlock for writes; reads remain lock-free
+        // Lock-free implementation using CAS
         void insert(const InternalKey &key, const Slice &value)
         {
-                // Copy key and value data into arena (can be done outside lock)
+                // Copy key and value data into arena
                 Slice stored_key_data;
                 if (key.user_key.size() > 0)
                 {
@@ -95,34 +86,47 @@ class SkipList
 
                 int height = random_height();
 
-                lock_insert();
-
-                // Update max height if needed
+                // Update max height using CAS
                 int current_max = max_height_.load(std::memory_order_relaxed);
-                if (height > current_max)
+                while (height > current_max)
                 {
-                        max_height_.store(height, std::memory_order_relaxed);
+                        if (max_height_.compare_exchange_weak(current_max, height, std::memory_order_relaxed))
+                        {
+                                break;
+                        }
+                        // current_max is updated by compare_exchange_weak on failure
                 }
 
-                // Find insertion point
-                Node *prev[kMaxHeight];
-                find_greater_or_equal(stored_key, prev);
-
-                // Fill in prev for new levels
-                for (int i = current_max; i < height; i++)
-                {
-                        prev[i] = head_;
-                }
-
-                // Create and link node
+                // Create node
                 Node *x = new_node(stored_key, stored_value, height);
-                for (int i = 0; i < height; i++)
-                {
-                        x->set_next(i, prev[i]->get_next(i));
-                        prev[i]->set_next(i, x);
-                }
 
-                unlock_insert();
+                // Link node at each level using CAS, bottom-up
+                for (int level = 0; level < height; level++)
+                {
+                        while (true)
+                        {
+                                // Find predecessor at this level
+                                Node *pred = find_predecessor_at_level(stored_key, level);
+                                Node *succ = pred->get_next(level);
+
+                                // Validate that succ is actually >= our key (or null)
+                                // If succ < our key, another thread inserted and we need to re-search
+                                if (succ != nullptr && succ->key.compare(stored_key) < 0)
+                                {
+                                        continue; // Re-search for correct predecessor
+                                }
+
+                                // Set our next pointer
+                                x->set_next(level, succ);
+
+                                // Try to link
+                                if (pred->cas_next(level, succ, x))
+                                {
+                                        break; // Success, move to next level
+                                }
+                                // CAS failed, retry - another thread modified pred->next
+                        }
+                }
         }
 
         // Point lookup (returns newest version for user key)
@@ -220,6 +224,30 @@ class SkipList
                         height++;
                 }
                 return height;
+        }
+
+        // Find predecessor of key at a specific level (for lock-free insert)
+        Node *find_predecessor_at_level(const InternalKey &key, int target_level) const
+        {
+                Node *x = head_;
+                int level = max_height_.load(std::memory_order_relaxed) - 1;
+
+                while (true)
+                {
+                        Node *next = x->get_next(level);
+                        if (next != nullptr && next->key.compare(key) < 0)
+                        {
+                                x = next;
+                        }
+                        else
+                        {
+                                if (level == target_level)
+                                {
+                                        return x;
+                                }
+                                level--;
+                        }
+                }
         }
 
         // Find the first node >= key
