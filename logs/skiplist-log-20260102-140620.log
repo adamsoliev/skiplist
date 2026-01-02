@@ -1,0 +1,27 @@
+2026-01-02 14:06:20.361 [INFO] SkipList Multi-threaded Stress Test V1
+2026-01-02 14:06:20.361 [INFO] ====================================
+2026-01-02 14:06:20.361 [INFO] Keys to insert: 20000000
+2026-01-02 14:06:20.361 [INFO] Threads: 12
+2026-01-02 14:06:20.361 [INFO] Key size: 16 bytes
+2026-01-02 14:06:20.361 [INFO] Value size: 100 bytes
+2026-01-02 14:06:20.361 [INFO] 
+2026-01-02 14:06:20.361 [INFO] Inserting keys...
+2026-01-02 14:06:21.361 [INFO]   5M keys, 4840K ops/sec, memory: 862 MB
+2026-01-02 14:06:22.362 [INFO]   10M keys, 4680K ops/sec, memory: 1695 MB
+2026-01-02 14:06:23.362 [INFO]   14M keys, 4686K ops/sec, memory: 2529 MB
+2026-01-02 14:06:24.362 [INFO]   19M keys, 4583K ops/sec, memory: 3344 MB
+2026-01-02 14:06:25.362 [INFO]   20M keys, 1207K ops/sec, memory: 3559 MB
+2026-01-02 14:06:25.362 [INFO] 
+2026-01-02 14:06:25.362 [INFO] === Results ===
+2026-01-02 14:06:25.362 [INFO] Total keys inserted: 20000000
+2026-01-02 14:06:25.362 [INFO] Threads: 12
+2026-01-02 14:06:25.362 [INFO] Total time: 4.64 seconds
+2026-01-02 14:06:25.362 [INFO] Throughput: 4309604 inserts/sec
+2026-01-02 14:06:25.362 [INFO] Throughput: 4.31 M inserts/sec
+2026-01-02 14:06:25.362 [INFO] Arena memory: 3559.38 MB
+2026-01-02 14:06:25.362 [INFO] Bytes per entry: 186.614
+2026-01-02 14:06:25.362 [INFO] 
+2026-01-02 14:06:25.362 [INFO] === Verification ===
+2026-01-02 14:06:25.362 [INFO] Key 0: found (value size=100)
+2026-01-02 14:06:25.362 [INFO] Key 10000000: found (value size=100)
+2026-01-02 14:06:25.362 [INFO] Key 19999999: found (value size=100)

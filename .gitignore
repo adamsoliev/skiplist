@@ -18,3 +18,10 @@ third_party/
 
 # Logs
 # logs/
+
+# Claude
+.claude/settings.local.json
+
+# Perf
+*perf.data
+*perf.data.old
