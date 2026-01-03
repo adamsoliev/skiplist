@@ -245,6 +245,7 @@ fuzz-clean:
 clean:
 	rm -f $(TARGET) $(TEST_TARGET) $(TEST_OBJECTS) $(BENCH_TARGET) $(BENCH_OBJECTS) benchmark_results.json
 	rm -f $(COMP_BENCH_TARGET) $(COMP_BENCH_OBJECTS) $(REDIS_SKIPLIST_OBJ) comp_benchmark_results.json
+	$(MAKE) -C fuzz clean
 
 distclean: clean
 	rm -rf third_party

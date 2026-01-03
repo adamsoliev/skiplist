@@ -30,3 +30,7 @@ third_party/benchmark/
 *perf.data
 *perf.data.old
 logs/
+
+# Fuzz
+fuzz/corpus/
+fuzz/*_fuzzer
