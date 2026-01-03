@@ -5,6 +5,7 @@
       "Bash(clang-format:*)",
       "Bash(clang-tidy:*)",
       "Bash(cmake:*)",
+      "Bash(echo:*)",
       "Bash(git branch:*)",
       "Bash(git diff:*)",
       "Bash(git log:*)",
