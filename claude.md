@@ -2,8 +2,7 @@
 
 ## Project Overview
 
-**minilsm** - Thread-safe skiplist in C++17 with lock-free arena allocator. Reference implementation for LSM tree indexing.
-
+**minilsm** - Thread-safe skiplist in C++17 with lock-free arena allocator.
 **Structure:**
 - `src/` - Core: skiplist.hpp, arena.hpp, key.hpp, slice.hpp
 - `tests/` - Google Test (basic, concurrent, iterator)
