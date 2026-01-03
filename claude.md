@@ -1,5 +1,24 @@
 # Claude Code Notes
 
+## Development Workflow
+
+```sh
+# 1. Make changes
+
+# 2. Run tests
+make test                    # Unit tests
+make sanitizers              # ASan + TSan + UBSan
+
+# 3. Format/lint before committing
+make format                  # Format all files
+make format-check            # Check formatting (CI)
+make lint                    # Run clang-tidy
+```
+
+## Git Commands
+
+Always use `git [action] ...`, not `git -C path [action]`.
+
 ## CI Testing with Multipass
 
 Always test CI changes locally in an Ubuntu VM using multipass before pushing:

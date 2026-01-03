@@ -25,6 +25,7 @@ third_party/benchmark/
 
 # Claude
 .claude/settings.local.json
+!.claude/settings.json
 
 # Perf
 *perf.data
