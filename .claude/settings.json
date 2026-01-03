@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(cat:*)",
       "Bash(clang-format:*)",
       "Bash(clang-tidy:*)",
       "Bash(cmake:*)",
@@ -9,9 +10,11 @@
       "Bash(git log:*)",
       "Bash(git show:*)",
       "Bash(git status:*)",
+      "Bash(head:*)",
       "Bash(ls:*)",
       "Bash(make:*)",
       "Bash(pwd:*)",
+      "Bash(tail:*)",
       "Bash(which:*)"
     ]
   }
