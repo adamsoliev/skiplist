@@ -1,0 +1,46 @@
+# Key types
+"Put"
+"Delete"
+"RangePut"
+"RangeDelete"
+"Update"
+"RangeUpdate"
+
+# Common key patterns
+"key"
+"user"
+"test"
+"data"
+"value"
+
+# Null bytes and boundaries
+"\x00"
+"\xFF"
+"\x00\x00\x00\x00"
+"\xFF\xFF\xFF\xFF"
+"\x00\x00\x00\x00\x00\x00\x00\x00"
+"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
+
+# Size boundaries
+"\x00"
+"\x01"
+"\x7F"
+"\x80"
+"\xFE"
+"\xFF"
+
+# Common prefixes for sorted keys
+"a"
+"aa"
+"aaa"
+"b"
+"bb"
+"z"
+"zz"
+"zzz"
+
+# Sequence number edge cases (8-byte little endian)
+"\x00\x00\x00\x00\x00\x00\x00\x00"
+"\x01\x00\x00\x00\x00\x00\x00\x00"
+"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x7F"
+"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"

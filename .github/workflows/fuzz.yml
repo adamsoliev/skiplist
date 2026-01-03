@@ -1,0 +1,160 @@
+name: Fuzz Testing
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours for continuous fuzzing
+
+jobs:
+  fuzz-asan:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fuzzer: [skiplist_fuzzer, arena_fuzzer, iterator_fuzzer]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Restore corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus/${{ matrix.fuzzer }}
+          key: fuzz-corpus-${{ matrix.fuzzer }}-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.fuzzer }}-
+
+      - name: Build fuzzer
+        run: |
+          cd fuzz
+          make ${{ matrix.fuzzer }}
+
+      - name: Run fuzzer (5 minutes)
+        run: |
+          mkdir -p fuzz/corpus/${{ matrix.fuzzer }}
+          cd fuzz
+          ./${{ matrix.fuzzer }} \
+            -max_total_time=300 \
+            -max_len=4096 \
+            -timeout=30 \
+            -rss_limit_mb=2048 \
+            -print_final_stats=1 \
+            -dict=dictionaries/skiplist.dict \
+            corpus/${{ matrix.fuzzer }}/
+
+      - name: Save corpus
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: fuzz/corpus/${{ matrix.fuzzer }}
+          key: fuzz-corpus-${{ matrix.fuzzer }}-${{ github.sha }}
+
+      - name: Upload crashes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crashes-${{ matrix.fuzzer }}
+          path: |
+            fuzz/crash-*
+            fuzz/oom-*
+            fuzz/timeout-*
+            fuzz/slow-unit-*
+
+  fuzz-tsan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Restore corpus
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus/concurrent_fuzzer
+          key: fuzz-corpus-concurrent-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-concurrent-
+
+      - name: Build concurrent fuzzer with TSan
+        run: |
+          cd fuzz
+          make tsan
+
+      - name: Run concurrent fuzzer (5 minutes)
+        run: |
+          mkdir -p fuzz/corpus/concurrent_fuzzer
+          cd fuzz
+          ./concurrent_fuzzer \
+            -max_total_time=300 \
+            -max_len=4096 \
+            -timeout=60 \
+            -print_final_stats=1 \
+            corpus/concurrent_fuzzer/
+
+      - name: Save corpus
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: fuzz/corpus/concurrent_fuzzer
+          key: fuzz-corpus-concurrent-${{ github.sha }}
+
+      - name: Upload TSan reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsan-reports
+          path: fuzz/crash-*
+
+  coverage-report:
+    runs-on: ubuntu-latest
+    needs: [fuzz-asan]
+    if: github.event_name == 'schedule'  # Only on scheduled runs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Restore all corpora
+        uses: actions/cache@v4
+        with:
+          path: fuzz/corpus
+          key: fuzz-corpus-all-${{ github.sha }}
+          restore-keys: |
+            fuzz-corpus-skiplist_fuzzer-
+            fuzz-corpus-arena_fuzzer-
+            fuzz-corpus-iterator_fuzzer-
+
+      - name: Build with coverage
+        run: |
+          cd fuzz
+          make clean
+          CXXFLAGS="-std=c++17 -g -O2 -fno-omit-frame-pointer -fprofile-instr-generate -fcoverage-mapping" \
+          make all
+
+      - name: Run fuzzers for coverage
+        run: |
+          cd fuzz
+          for f in skiplist_fuzzer arena_fuzzer iterator_fuzzer; do
+            mkdir -p corpus/$f
+            LLVM_PROFILE_FILE="$f.profraw" ./$f -runs=10000 corpus/$f/ 2>/dev/null || true
+          done
+
+      - name: Generate coverage report
+        run: |
+          cd fuzz
+          llvm-profdata merge -sparse *.profraw -o coverage.profdata || true
+          llvm-cov report ./skiplist_fuzzer -instr-profile=coverage.profdata ../src/*.hpp 2>/dev/null || echo "Coverage report generation skipped"
