@@ -15,7 +15,7 @@ namespace minilsm
 
 class Logger
 {
-public:
+      public:
         Logger() = default;
 
         explicit Logger(const std::string &program_name, const std::string &log_dir = "logs")
@@ -59,35 +59,18 @@ public:
                 return true;
         }
 
-        template <typename... Args>
-        void operator()(Args &&...args)
-        {
-                write("INFO", std::forward<Args>(args)...);
-        }
+        template <typename... Args> void operator()(Args &&...args) { write("INFO", std::forward<Args>(args)...); }
 
-        template <typename... Args>
-        void info(Args &&...args)
-        {
-                write("INFO", std::forward<Args>(args)...);
-        }
+        template <typename... Args> void info(Args &&...args) { write("INFO", std::forward<Args>(args)...); }
 
-        template <typename... Args>
-        void warn(Args &&...args)
-        {
-                write("WARN", std::forward<Args>(args)...);
-        }
+        template <typename... Args> void warn(Args &&...args) { write("WARN", std::forward<Args>(args)...); }
 
-        template <typename... Args>
-        void error(Args &&...args)
-        {
-                write("ERROR", std::forward<Args>(args)...);
-        }
+        template <typename... Args> void error(Args &&...args) { write("ERROR", std::forward<Args>(args)...); }
 
         const std::string &log_path() const { return log_path_; }
 
-private:
-        template <typename... Args>
-        void write(const char *level, Args &&...args)
+      private:
+        template <typename... Args> void write(const char *level, Args &&...args)
         {
                 std::ostringstream oss;
                 ((oss << std::forward<Args>(args)), ...);
@@ -125,4 +108,4 @@ private:
         bool initialized_ = false;
 };
 
-}  // namespace minilsm
+} // namespace minilsm

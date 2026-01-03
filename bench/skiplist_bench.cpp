@@ -144,14 +144,16 @@ static void BM_SkipListConcurrentInsert(benchmark::State &state)
 
                 for (int t = 0; t < num_threads; t++)
                 {
-                        threads.emplace_back([&list, t]() {
-                                for (int i = 0; i < kOpsPerThread; i++)
-                                {
-                                        std::string key = make_key(t * kOpsPerThread + i);
-                                        InternalKey ikey(Slice(key), t * kOpsPerThread + i, KeyType::Put);
-                                        list.insert(ikey, Slice("value"));
-                                }
-                        });
+                        threads.emplace_back(
+                            [&list, t]()
+                            {
+                                    for (int i = 0; i < kOpsPerThread; i++)
+                                    {
+                                            std::string key = make_key(t * kOpsPerThread + i);
+                                            InternalKey ikey(Slice(key), t * kOpsPerThread + i, KeyType::Put);
+                                            list.insert(ikey, Slice("value"));
+                                    }
+                            });
                 }
                 for (auto &t : threads)
                 {
@@ -189,28 +191,30 @@ static void BM_SkipListMixedReadWrite(benchmark::State &state)
 
                 for (int t = 0; t < num_threads; t++)
                 {
-                        threads.emplace_back([&list, &write_counter, t]() {
-                                std::mt19937 rng(t);
-                                std::uniform_int_distribution<int> op_dist(0, 99);
-                                std::uniform_int_distribution<int> key_dist(0, 9999);
+                        threads.emplace_back(
+                            [&list, &write_counter, t]()
+                            {
+                                    std::mt19937 rng(t);
+                                    std::uniform_int_distribution<int> op_dist(0, 99);
+                                    std::uniform_int_distribution<int> key_dist(0, 9999);
 
-                                for (int i = 0; i < kOpsPerThread; i++)
-                                {
-                                        if (op_dist(rng) < kReadRatio)
-                                        {
-                                                std::string key = make_key(key_dist(rng));
-                                                std::string value;
-                                                benchmark::DoNotOptimize(list.get(Slice(key), &value));
-                                        }
-                                        else
-                                        {
-                                                int idx = write_counter.fetch_add(1);
-                                                std::string key = make_key(idx);
-                                                InternalKey ikey(Slice(key), idx, KeyType::Put);
-                                                list.insert(ikey, Slice("value"));
-                                        }
-                                }
-                        });
+                                    for (int i = 0; i < kOpsPerThread; i++)
+                                    {
+                                            if (op_dist(rng) < kReadRatio)
+                                            {
+                                                    std::string key = make_key(key_dist(rng));
+                                                    std::string value;
+                                                    benchmark::DoNotOptimize(list.get(Slice(key), &value));
+                                            }
+                                            else
+                                            {
+                                                    int idx = write_counter.fetch_add(1);
+                                                    std::string key = make_key(idx);
+                                                    InternalKey ikey(Slice(key), idx, KeyType::Put);
+                                                    list.insert(ikey, Slice("value"));
+                                            }
+                                    }
+                            });
                 }
                 for (auto &t : threads)
                 {

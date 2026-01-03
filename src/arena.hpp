@@ -19,14 +19,13 @@ namespace minilsm
 class Arena
 {
       public:
-        static constexpr size_t kChunkSize = 128 * 1024;        // 128KB chunks
-        static constexpr size_t kLargeThreshold = 128 * 1024;   // Bypass shards for large allocs
-        static constexpr size_t kCacheLineSize = 64;            // Cache line padding
-        static constexpr int kRepickThreshold = 64;             // Spin count before repick
-        static constexpr int kCentralSpinLimit = 100;           // Spins before yield in central lock
+        static constexpr size_t kChunkSize = 128 * 1024;      // 128KB chunks
+        static constexpr size_t kLargeThreshold = 128 * 1024; // Bypass shards for large allocs
+        static constexpr size_t kCacheLineSize = 64;          // Cache line padding
+        static constexpr int kRepickThreshold = 64;           // Spin count before repick
+        static constexpr int kCentralSpinLimit = 100;         // Spins before yield in central lock
 
-        explicit Arena(size_t max_bytes = 0, size_t num_shards = 0)
-            : max_bytes_(max_bytes), memory_usage_(0)
+        explicit Arena(size_t max_bytes = 0, size_t num_shards = 0) : max_bytes_(max_bytes), memory_usage_(0)
         {
                 // Default shard count: hardware_concurrency() - 2, minimum 1
                 if (num_shards == 0)
@@ -117,10 +116,7 @@ class Arena
         };
 
         // Simple TAS spinlock for shards
-        bool try_lock_shard(Shard &shard)
-        {
-                return !shard.lock.test_and_set(std::memory_order_acquire);
-        }
+        bool try_lock_shard(Shard &shard) { return !shard.lock.test_and_set(std::memory_order_acquire); }
 
         void unlock_shard(Shard &shard) { shard.lock.clear(std::memory_order_release); }
 
@@ -387,7 +383,7 @@ class Arena
         Shard *shards_;
         std::atomic_flag central_lock_ = ATOMIC_FLAG_INIT;
         std::atomic<size_t> memory_usage_;
-        std::vector<void *> blocks_;  // Owned memory blocks (freed in destructor)
+        std::vector<void *> blocks_; // Owned memory blocks (freed in destructor)
 };
 
 } // namespace minilsm

@@ -20,7 +20,6 @@ class SkipList
         static constexpr int kBranchingFactor = 4;
 
       private:
-
         struct Node
         {
                 uint32_t key_size;
