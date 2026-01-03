@@ -75,6 +75,7 @@ UBSAN_FLAGS = -fsanitize=undefined -fno-omit-frame-pointer
 .PHONY: all clean test bench comp-bench sanitizers valgrind
 .PHONY: format format-check lint compile_commands
 .PHONY: perf-record perf-report perf-stat perf-annotate flamegraph aperf-record aperf-report
+.PHONY: fuzz fuzz-quick fuzz-tsan fuzz-clean
 .PHONY: help
 
 all: $(TARGET)
@@ -224,6 +225,21 @@ lint:
 compile_commands: clean
 	bear -- $(MAKE) all $(TEST_TARGET)
 
+# === Fuzzing ===
+
+fuzz:
+	$(MAKE) -C fuzz all
+
+fuzz-quick:
+	$(MAKE) -C fuzz quick
+
+fuzz-tsan:
+	$(MAKE) -C fuzz tsan
+	cd fuzz && ./concurrent_fuzzer -max_total_time=300 corpus/concurrent/
+
+fuzz-clean:
+	$(MAKE) -C fuzz clean
+
 # === Cleanup ===
 
 clean:
@@ -249,6 +265,12 @@ help:
 	@echo "  valgrind     Run tests with Valgrind"
 	@echo "  bench        Run benchmarks (outputs JSON)"
 	@echo "  comp-bench   Run comparative benchmark (minilsm vs RocksDB vs Redis)"
+	@echo ""
+	@echo "Fuzzing:"
+	@echo "  fuzz         Build all fuzzer targets"
+	@echo "  fuzz-quick   Run fuzzers for 60s each (smoke test)"
+	@echo "  fuzz-tsan    Build and run ThreadSanitizer fuzzer"
+	@echo "  fuzz-clean   Remove fuzzer binaries and crash files"
 	@echo ""
 	@echo "Profile (requires sudo):"
 	@echo "  perf-stat    Show CPU counters (cycles, stalls, cache/branch misses)"

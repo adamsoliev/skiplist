@@ -1,0 +1,14 @@
+homepage: "https://github.com/adamsoliev/skiplist"
+language: c++
+primary_contact: "maintainer@example.com"
+sanitizers:
+  - address
+  - undefined
+  - memory
+architectures:
+  - x86_64
+fuzzing_engines:
+  - libfuzzer
+  - afl
+  - honggfuzz
+main_repo: "https://github.com/adamsoliev/skiplist"
