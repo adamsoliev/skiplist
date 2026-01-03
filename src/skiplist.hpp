@@ -10,6 +10,60 @@
 #include <random>
 #include <string>
 
+/*
+ * A skiplist is built in layers. The bottom layer is a regular ordered linked list. Each higher level
+ * can be thought of an express lane for the lists below, where an element in layer `i` appears in
+ * layer `i + 1` with fixed probability `p` (eg 1/2 or 1/4). An easy way to visualize this is with coin
+ * flips. If `p` is 1/4, then you flip a coin twice and if both are heads, you move the Node up one layer.
+ *
+ * What the above numbers mean for all the nodes:
+ * 	+-------+------------------------+------------------------+
+ * 	| Layer | p = 1/2 (~50% promote) | p = 1/4 (~25% promote) |
+ * 	+-------+------------------------+------------------------+
+ * 	| 3     | ~12.5% of nodes        | ~1.5% of nodes         |
+ * 	| 2     | ~25% of nodes          | ~6.25% of nodes        |
+ * 	| 1     | ~50% of nodes          | ~25% of nodes          |
+ * 	| 0     | 100% (all nodes)       | 100% (all nodes)       |
+ * 	+-------+------------------------+------------------------+
+ *
+ *  			+---+                   +---+
+ *  level 2		| p |	     	     	| p |
+ *  			+---+	+---+	     	+---+
+ *  level 1		| p |	| p |	     	| p |
+ *  			+---+	+---+	+---+	+---+
+ *  level 0 	| p |	| p |	| p |	| p |
+ *  			+---+	+---+	+---+	+---+
+ *  			| E |	| 1 |	| 2 |	| 3 |
+ *  			+---+	+---+	+---+	+---+
+ * 	where
+ * 		E - empty node (head)
+ * 		p - pointer
+ * 		numbers - actual node
+ *
+ * In practice, you'd often store the actual nodes at the bottom layer and all higher layers consist of
+ * pointers to the other bottom layer nodes.
+ *
+ * The primary use case of skiplists is ordered data, where it has an excellent time complexity for all
+ * core operations. The usual contrast here is balanced trees, which are much harder to implement due to
+ * their complex rebalancing operations.
+ *	 +------------------------------------------+
+ *	 |      Skip List Time Complexity           |
+ *	 +------------+------------+----------------+
+ *	 | Operation  |  Average   |   Worst Case   |
+ *	 +------------+------------+----------------+
+ *	 | Search     | O(log n)   |   O(n)         |
+ *	 | Insert     | O(log n)   |   O(n)         |
+ *	 | Delete     | O(log n)   |   O(n)         |
+ *	 +------------+------------+----------------+
+ *	 |      Space Complexity                    |
+ *	 +------------+------------+----------------+
+ *	 | Space      | O(n)       |   O(n log n)   |
+ *	 +------------+------------+----------------+
+ *
+ * One of the core downsides of skiplists is their poor cache locality - using the above diagram,
+ * `1`, `2`, `3` aren't guaranteed to be in adjacent memory locations, so you often pointer-chase.
+ */
+
 namespace minilsm
 {
 
