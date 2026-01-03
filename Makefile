@@ -64,6 +64,7 @@ APERF_VERSION = v1.0.0
 APERF_DIR = $(realpath ..)/aperf
 PROFILE_NAME ?= skiplist_profile
 REPORT_NAME ?= skiplist_report
+PROFILE_PERIOD ?= 30
 
 # Number of parallel jobs
 NPROCS := $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
@@ -75,7 +76,7 @@ UBSAN_FLAGS = -fsanitize=undefined -fno-omit-frame-pointer
 
 .PHONY: all clean test bench comp-bench sanitizers valgrind
 .PHONY: format format-check lint compile_commands
-.PHONY: perf-record perf-report perf-stat perf-annotate flamegraph aperf-install aperf-record aperf-report
+.PHONY: perf-record perf-report perf-stat perf-annotate flamegraph aperf-install aperf-record aperf-report aperf-profile
 .PHONY: fuzz fuzz-quick fuzz-tsan fuzz-clean
 .PHONY: help
 
@@ -222,6 +223,15 @@ aperf-report:
 	sudo $(APERF_DIR)/aperf report -r $(PROFILE_NAME) -n $(REPORT_NAME)
 	@echo "Report generated in $(REPORT_NAME)/"
 
+aperf-profile: $(TARGET)
+	@test -x $(APERF_DIR)/aperf || (echo "Error: aperf not found. Run 'make aperf-install' first" && exit 1)
+	@sudo rm -rf $(PROFILE_NAME) $(REPORT_NAME)
+	@echo "Starting aperf profile ($(PROFILE_PERIOD)s period)..."
+	@sudo bash -c 'PATH=$(dir $(PERF)):$$PATH $(APERF_DIR)/aperf record -r $(PROFILE_NAME) -i 1 -p $(PROFILE_PERIOD) --profile & sleep 2 && ./$(TARGET); wait'
+	@echo "Generating report..."
+	sudo $(APERF_DIR)/aperf report -r $(PROFILE_NAME) -n $(REPORT_NAME)
+	@echo "Report generated in $(REPORT_NAME)/"
+
 # === Code Quality ===
 
 format:
@@ -293,6 +303,7 @@ help:
 	@echo "  aperf-install Download and install aperf to ../aperf"
 	@echo "  aperf-record Record aperf profile (PROFILE_NAME=name)"
 	@echo "  aperf-report Generate aperf report (REPORT_NAME=name)"
+	@echo "  aperf-profile Run skiplist with aperf and generate report (PROFILE_PERIOD=sec)"
 	@echo ""
 	@echo "Code quality:"
 	@echo "  format       Format source files"
