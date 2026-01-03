@@ -19,7 +19,7 @@ jobs:
           sudo apt-get install -y cmake clang
 
       - name: Build and run tests
-        run: make check
+        run: make test
 
   format:
     runs-on: ubuntu-latest
@@ -49,7 +49,7 @@ jobs:
           find src \( -name '*.cpp' -o -name '*.hpp' \) | \
             xargs -I {} clang-tidy {} -- -std=c++17
 
-  test-asan:
+  sanitizers:
     runs-on: ubuntu-latest
 
     steps:
@@ -60,36 +60,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake clang
 
-      - name: Run tests with AddressSanitizer
-        run: make check-asan
-
-  test-tsan:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang
-
-      - name: Run tests with ThreadSanitizer
-        run: make check-tsan
-
-  test-ubsan:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang
-
-      - name: Run tests with UndefinedBehaviorSanitizer
-        run: make check-ubsan
+      - name: Run tests with all sanitizers (ASan, TSan, UBSan)
+        run: make sanitizers
 
   test-valgrind:
     runs-on: ubuntu-latest
@@ -102,5 +74,5 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake clang valgrind
 
-      - name: Run tests with Valgrind
-        run: make check-valgrind
+      - name: Build and run tests with Valgrind
+        run: make CPU_FLAGS="" valgrind
