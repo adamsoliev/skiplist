@@ -60,7 +60,8 @@ REDIS_SKIPLIST_OBJ = third_party/redis/zskiplist.o
 PERF = /usr/lib/linux-tools-6.8.0-31/perf
 PERF_FREQ = 99
 FLAMEGRAPH_DIR = /home/ubuntu/development/FlameGraph
-APERF_DIR = /tmp/aperf-v0.1.10-alpha-aarch64
+APERF_VERSION = v1.0.0
+APERF_DIR = $(realpath ..)/aperf
 PROFILE_NAME ?= skiplist_profile
 REPORT_NAME ?= skiplist_report
 
@@ -74,7 +75,7 @@ UBSAN_FLAGS = -fsanitize=undefined -fno-omit-frame-pointer
 
 .PHONY: all clean test bench comp-bench sanitizers valgrind
 .PHONY: format format-check lint compile_commands
-.PHONY: perf-record perf-report perf-stat perf-annotate flamegraph aperf-record aperf-report
+.PHONY: perf-record perf-report perf-stat perf-annotate flamegraph aperf-install aperf-record aperf-report
 .PHONY: fuzz fuzz-quick fuzz-tsan fuzz-clean
 .PHONY: help
 
@@ -203,8 +204,18 @@ flamegraph:
 	sudo $(PERF) script | $(FLAMEGRAPH_DIR)/stackcollapse-perf.pl | $(FLAMEGRAPH_DIR)/flamegraph.pl > flamegraph.svg
 	@echo "Generated flamegraph.svg"
 
+aperf-install:
+	@if [ -x $(APERF_DIR)/aperf ]; then \
+		echo "aperf already installed at $(APERF_DIR)"; \
+	else \
+		echo "Downloading aperf $(APERF_VERSION) for aarch64..."; \
+		mkdir -p $(APERF_DIR); \
+		curl -sL https://github.com/aws/aperf/releases/download/$(APERF_VERSION)/aperf-$(APERF_VERSION)-aarch64.tar.gz | tar xz --strip-components=1 -C $(APERF_DIR); \
+		echo "aperf installed to $(APERF_DIR)"; \
+	fi
+
 aperf-record: $(TARGET)
-	@test -x $(APERF_DIR)/aperf || (echo "Error: aperf not found at $(APERF_DIR)" && exit 1)
+	@test -x $(APERF_DIR)/aperf || (echo "Error: aperf not found. Run 'make aperf-install' first" && exit 1)
 	sudo $(APERF_DIR)/aperf record -r $(PROFILE_NAME) -i 1 -p 180 --profile
 
 aperf-report:
@@ -279,6 +290,7 @@ help:
 	@echo "  perf-report  Show interactive perf report"
 	@echo "  perf-annotate Show annotated assembly from perf.data"
 	@echo "  flamegraph   Generate flamegraph.svg"
+	@echo "  aperf-install Download and install aperf to ../aperf"
 	@echo "  aperf-record Record aperf profile (PROFILE_NAME=name)"
 	@echo "  aperf-report Generate aperf report (REPORT_NAME=name)"
 	@echo ""
