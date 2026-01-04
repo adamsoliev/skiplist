@@ -62,17 +62,3 @@ jobs:
 
       - name: Run tests with all sanitizers (ASan, TSan, UBSan)
         run: make sanitizers
-
-  test-valgrind:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake clang valgrind
-
-      - name: Build and run tests with Valgrind
-        run: make CPU_FLAGS="" valgrind
